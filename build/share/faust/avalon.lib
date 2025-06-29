@@ -1,0 +1,68 @@
+/***********************************************************************
+************************************************************************
+AVALON Audio Process Library
+Copyright (C) 2024, Tactevo Software LLC
+------------------------------------------------------------------------
+************************************************************************
+************************************************************************/
+
+import("stdfaust.lib");
+
+declare name "Avalon Audio Process LIbrary";
+declare version "0.1.0";
+
+
+// A simple binaural entrainment oscillator implemented using two sine
+// oscillators where center frequencies are spread by the modulation frequency
+//
+// * `carrier`: center carrier frequency in hz
+// * `modulator`: modulation frequency in hz
+// * `amp`: output level (0..1)
+
+binosc_simple(carrier,modulator,amp) = o1, o2
+    with {
+        o1 = os.oscsin(carrier+modulator)*amp;
+        o2 = os.oscsin(carrier-modulator)*amp;
+    };
+
+binosc_delay(carrier,modulator,amp,interp) = left, right
+    with {
+
+        f_samps = ma.SR / carrier;
+        o1 = os.oscsin(carrier) * amp;
+        o2 = os.oscsin(carrier) * amp;
+        m = os.oscsin(modulator);
+        left = o1 : de.sdelay(f_samps,interp,m*f_samps/2);
+        right = o2 : de.sdelay(f_samps,interp,m*-f_samps/2);
+    };
+
+// allpass (maxmsp implementation)
+// y[n] = (-g * x[n]) + x[n - d] + (g * y[n - d])    
+apf(freq,phase,gain) = _ <: ( -gain * _ , de.fdelay(16384,d * phase / 2) ) :>  + ~(gain * de.fdelay(16384,d * phase / 2))  
+    with {
+        d = ma.SR / freq ;
+    };
+
+// multi lfo
+
+multi_lfo(base,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) = os.oscsin(f1)*a1 + os.oscsin(f2)*a2 + os.oscsin(f3)*a3 + os.oscsin(f4)*a4 + os.oscsin(f5)*a5 + os.oscsin(f6)*a6 + os.oscsin(f7)*a7 + os.oscsin(f8)*a8 + os.oscsin(f9)*a9 + os.oscsin(f10)*a10 
+    with {
+        f1 = base;
+        f2 = f1*2;
+        f3 = f2*2;
+        f4 = f3*2;
+        f5 = f4*2;
+        f6 = f5*2;
+        f7 = f6*2;
+        f8 = f7*2;
+        f9 = f8*2;
+        f10 = f9*2;                
+    };
+
+carrier_osc(freq,amp) = os.oscsin(freq) * amp;
+
+// TODO
+
+// ocean_waves
+// multiband entrainment oscillator
+// synths (ie, for polyrhythm experience)
