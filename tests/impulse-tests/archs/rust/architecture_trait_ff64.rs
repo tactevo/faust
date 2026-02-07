@@ -37,6 +37,7 @@ use std::io::Write;
 
 type F32 = f32;
 type F64 = f64;
+type FaustFloat = f64;
 
 /*
 type F32 = Fast<f32>;
@@ -178,6 +179,7 @@ impl<T: Float + FromPrimitive> UI<T> for ButtonUI {
     fn declare(&mut self, param: Option<ParamIndex>, key: &str, value: &str) {}
 }
 
+#[cfg_attr(feature = "default-boxed", derive(default_boxed::DefaultBoxed))]
 // Generated intrinsics:
 <<includeIntrinsic>>
 

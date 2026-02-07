@@ -44,6 +44,8 @@
 #include "daisy_seed.h"
 #endif
 
+daisy::DaisySeed* seedptr = nullptr;
+
 #include "faust/gui/meta.h"
 #include "faust/gui/UI.h"
 #include "faust/gui/DaisyControlUI.h"
@@ -56,6 +58,81 @@
 
 using namespace daisysp;
 using namespace std;
+
+#ifdef USE_SDRAM
+    #include"faust2daisy_sdram.h"
+    #if FAUST_SDRAM_SIZE_BYTES == 0
+        #undef USE_SDRAM
+    #endif
+#endif
+
+#ifdef USE_SDRAM
+
+
+uint8_t DSY_SDRAM_BSS faust_sdram_mem[ FAUST_SDRAM_SIZE_BYTES ];
+struct faustdaisy_dsp_memory_manager : public dsp_memory_manager
+{
+    struct mem_info_t
+    {
+        const char *name;
+        MemType type;
+        size_t size;
+        size_t size_bytes; 
+        size_t reads;
+        size_t writes;
+        void *ptr = nullptr; // pointeur to location in memory
+    };
+
+    void begin(size_t count) 
+    {
+        std::fill(faust_sdram_mem, faust_sdram_mem + FAUST_SDRAM_SIZE_BYTES, 0);
+        infos.resize(count);
+        info_cnt = 0;
+        offset = 0;
+    } 
+
+    void info(const char * name, MemType type, 
+        size_t size, size_t size_bytes, size_t reads, size_t writes) 
+    {
+        void * ptr = nullptr; 
+        bool is_sdram = (std::strcmp(name, "fZone") == 0) || (std::strcmp(name, "iZone") == 0); 
+        if(is_sdram)
+            ptr = static_cast<void *>(faust_sdram_mem + offset);
+        infos[info_cnt] = {name, type, size, size_bytes, reads, writes, ptr};
+        ++info_cnt;
+        if(is_sdram)
+            offset+= size_bytes;
+    }
+
+    void end() 
+    {
+        offset = 0;
+        info_cnt = 0;
+    }
+   
+    void *allocate(size_t size_bytes) 
+    {
+        if(infos[info_cnt].type == MemType::kObj_ptr)
+        {
+            ++info_cnt;
+            return std::malloc(size_bytes);
+        }
+        void *ptr = infos[info_cnt].ptr;
+        ++info_cnt;
+        return ptr;
+    }
+
+    void destroy(void *ptr) 
+    {
+        ptr = nullptr; 
+    }
+
+    std::vector<mem_info_t> infos;
+    size_t offset;
+    size_t info_cnt;
+};
+
+#endif  // SDRAM
 
 /******************************************************************************
  *******************************************************************************
@@ -108,30 +185,66 @@ static void AudioCallback(daisy::AudioHandle::InputBuffer in, daisy::AudioHandle
     DSP->compute(count, const_cast<float**>(in), out);
 }
 
+void createDSP() 
+{
+
+#ifdef USE_SDRAM 
+    #ifdef POLY 
+        mydsp::classInit(MY_SAMPLE_RATE);
+        DSP = mydsp::create();
+        DSP = new mydsp_poly(DSP, NVOICES, true, true);
+    #else 
+        mydsp::classInit(MY_SAMPLE_RATE);
+        DSP = mydsp::create();
+    #endif
+#else 
+    #ifdef POLY 
+        DSP = new mydsp();
+        DSP = new mydsp_poly(DSP, NVOICES, true, true);
+    #else 
+        DSP = new mydsp();
+    #endif
+#endif
+}
+
+void initDSP()
+{
+#ifdef USE_SDRAM 
+    #ifdef POLY
+    #else 
+        DSP->instanceInit(MY_SAMPLE_RATE);
+    #endif
+#else 
+    DSP->init(MY_SAMPLE_RATE);
+#endif
+}
+
 int main(void)
 {
-    // initialize seed hardware and daisysp modules
+    // (init)ialize seed hardware and daisysp modules
     hw.Init();
-    
-    // allocate DSP
-#ifdef POLY
-    int nvoices = 0;
-    bool midi_sync = false;
-    bool midi = false;
-    DSP = new mydsp();
-    MidiMeta::analyse(DSP, midi, midi_sync, nvoices);
-    DSP = new mydsp_poly(DSP, nvoices, true, true);
-#else
-    DSP = new mydsp();
+/*
+    Memory Manager Creation 
+*/
+#ifdef USE_SDRAM 
+    mydsp::fManager = new faustdaisy_dsp_memory_manager();
+    mydsp::memoryInfo();
 #endif
-    
+
+/*
+    DSP Creation 
+*/
+    DSP = createDSP();
+
     // set buffer-size
     hw.SetAudioBlockSize(MY_BUFFER_SIZE);
-    
-    // init Faust DSP
-    DSP->init(MY_SAMPLE_RATE);
-    
-    // setup controllers
+/*
+    DSP Initialization
+*/
+    initDSP();
+/*
+    Controllers setup 
+*/
 #if (defined PATCH) || (defined POD)
     control_UI = new DaisyControlUI(&hw.seed, MY_SAMPLE_RATE/MY_BUFFER_SIZE);
     DSP->buildUserInterface(control_UI);

@@ -161,12 +161,12 @@ void RustCodeContainer::produceInternal()
     string counter = "count";
     if (fSubContainerType == kInt) {
         tab(n + 1, *fOut);
-        *fOut << "pub fn fill" << fKlassName
-              << subst("(&mut self, $0: i32, table: &mut[i32]) {", counter);
+        *fOut << "pub fn fill" << fKlassName << "(&mut self, " << counter
+              << ": i32, table: &mut[i32]) {";
     } else {
         tab(n + 1, *fOut);
-        *fOut << "pub fn fill" << fKlassName
-              << subst("(&mut self, $0: i32, table: &mut[FaustFloat]) {", counter);
+        *fOut << "pub fn fill" << fKlassName << "(&mut self, " << counter << ": i32, table: &mut["
+              << ifloat() << "]) {";
     }
     tab(n + 2, *fOut);
     fCodeProducer.Tab(n + 2);
@@ -264,7 +264,6 @@ void RustCodeContainer::produceClass()
     fCodeProducer.setVarsRequiringGuards(toUnorderedSet(fStaticVarNames));
 
     int n = 0;
-    *fOut << "#[cfg_attr(feature = \"default-boxed\", derive(default_boxed::DefaultBoxed))]";
     if (gGlobal->gReprC) {
         tab(n, *fOut);
         *fOut << "#[repr(C)]";
@@ -282,9 +281,6 @@ void RustCodeContainer::produceClass()
     *fOut << "}";
     tab(n, *fOut);
 
-    tab(n, *fOut);
-    *fOut << "pub type FaustFloat = " << ifloat() << ";";
-
     // Generate gub containers
     generateSubContainers();
 
@@ -296,9 +292,12 @@ void RustCodeContainer::produceClass()
     // Missing math functions
     // See: https://users.rust-lang.org/t/analog-of-c-std-remainder/59670
     if (gGlobal->gFloatSize == 1 && !gGlobal->gRustNoLibm) {
+        *fOut << "#[cfg(not(target_arch = \"wasm32\"))] // Compile ffi bindings only on non-wasm "
+                 "targets";
+        tab(n, *fOut);
         *fOut << "mod ffi {";
         tab(n + 1, *fOut);
-        *fOut << "use std::os::raw::c_float;";
+        *fOut << "use core::ffi::c_float;";
         tab(n + 1, *fOut);
         *fOut << "// Conditionally compile the link attribute only on non-Windows platforms";
         tab(n + 1, *fOut);
@@ -316,13 +315,25 @@ void RustCodeContainer::produceClass()
         tab(n, *fOut);
         *fOut << "fn remainder_f32(from: f32, to: f32) -> f32 {";
         tab(n + 1, *fOut);
+        *fOut << "#[cfg(not(target_arch = \"wasm32\"))] // non-wasm targets use ffi bindings";
+        tab(n + 1, *fOut);
         *fOut << "unsafe { ffi::remainderf(from, to) }";
+        tab(n + 1, *fOut);
+        *fOut << "#[cfg(target_arch = \"wasm32\")] // wasm relies on libm";
+        tab(n + 1, *fOut);
+        *fOut << "libm::remainderf(from, to)";
         tab(n, *fOut);
         *fOut << "}";
         tab(n, *fOut);
         *fOut << "fn rint_f32(val: f32) -> f32 {";
         tab(n + 1, *fOut);
+        *fOut << "#[cfg(not(target_arch = \"wasm32\"))] // non-wasm targets use ffi bindings";
+        tab(n + 1, *fOut);
         *fOut << "unsafe { ffi::rintf(val) }";
+        tab(n + 1, *fOut);
+        *fOut << "#[cfg(target_arch = \"wasm32\")] // wasm relies on libm";
+        tab(n + 1, *fOut);
+        *fOut << "libm::rintf(val)";
         tab(n, *fOut);
         *fOut << "}";
         tab(n, *fOut);
@@ -333,9 +344,12 @@ void RustCodeContainer::produceClass()
         tab(n, *fOut);
         */
     } else if (gGlobal->gFloatSize == 2 && !gGlobal->gRustNoLibm) {
+        *fOut << "#[cfg(not(target_arch = \"wasm32\"))] // Compile ffi bindings only on non-wasm "
+                 "targets";
+        tab(n + 1, *fOut);
         *fOut << "mod ffi {";
         tab(n + 1, *fOut);
-        *fOut << "use std::os::raw::c_double;";
+        *fOut << "use core::ffi::c_double;";
         tab(n + 1, *fOut);
         *fOut << "// Conditionally compile the link attribute only on non-Windows platforms";
         tab(n + 1, *fOut);
@@ -353,13 +367,25 @@ void RustCodeContainer::produceClass()
         tab(n, *fOut);
         *fOut << "fn remainder_f64(from: f64, to: f64) -> f64 {";
         tab(n + 1, *fOut);
+        *fOut << "#[cfg(not(target_arch = \"wasm32\"))] // non-wasm targets use ffi bindings";
+        tab(n + 1, *fOut);
         *fOut << "unsafe { ffi::remainder(from, to) }";
+        tab(n + 1, *fOut);
+        *fOut << "#[cfg(target_arch = \"wasm32\")] // wasm relies on libm";
+        tab(n + 1, *fOut);
+        *fOut << "libm::remainder(from, to)";
         tab(n, *fOut);
         *fOut << "}";
         tab(n, *fOut);
         *fOut << "fn rint_f64(val: f64) -> f64 {";
         tab(n + 1, *fOut);
+        *fOut << "#[cfg(not(target_arch = \"wasm32\"))] // non-wasm targets use ffi bindings";
+        tab(n + 1, *fOut);
         *fOut << "unsafe { ffi::rint(val) }";
+        tab(n + 1, *fOut);
+        *fOut << "#[cfg(target_arch = \"wasm32\")] // wasm relies on libm";
+        tab(n + 1, *fOut);
+        *fOut << "libm::rint(val)";
         tab(n, *fOut);
         *fOut << "}";
         tab(n, *fOut);

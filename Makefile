@@ -1,4 +1,4 @@
-version := 2.81.2
+version := 2.84.3
 
 system	?= $(shell uname -s)
 
@@ -34,6 +34,10 @@ most : updatesubmodules
 
 developer : updatesubmodules
 	$(MAKE) -C $(BUILDLOCATION) cmake BACKENDS=all.cmake TARGETS=developer.cmake
+	$(MAKE) -C $(BUILDLOCATION)
+
+interp : updatesubmodules
+	$(MAKE) -C $(BUILDLOCATION) cmake BACKENDS=interp.cmake TARGETS=developer.cmake
 	$(MAKE) -C $(BUILDLOCATION)
 
 all : updatesubmodules
@@ -133,6 +137,7 @@ help :
 	@echo " 'remote'        : builds the libfaustremote.a library and the Faust RemoteServer"
 	@echo " 'sound2faust'   : builds the sound2faust utilities (requires libsndfile)"
 	@echo " 'parser'        : generates the parser from the lex and yacc files"
+	@echo " 'interp'        : generates static libfaust with the Interp backend only"
 	@echo
 	@echo "Distribution target"
 	@echo " 'world'         : the 'all' target and sound2faust"

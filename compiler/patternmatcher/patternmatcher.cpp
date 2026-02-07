@@ -62,7 +62,7 @@ static inline bool isCons(Tree x, Tree& h, Tree& t)
 
 /* Deconstruct a (BDA) op pattern (YO). */
 
-static inline bool isBoxPatternOp(Tree box, Node& n, Tree& t1, Tree& t2)
+static inline bool isBoxPatternOpBinary(Tree box, Node& n, Tree& t1, Tree& t2)
 {
     if (isBoxPar(box, t1, t2) || isBoxSeq(box, t1, t2) || isBoxSplit(box, t1, t2) ||
         isBoxMerge(box, t1, t2) || isBoxHGroup(box, t1, t2) || isBoxVGroup(box, t1, t2) ||
@@ -72,6 +72,16 @@ static inline bool isBoxPatternOp(Tree box, Node& n, Tree& t1, Tree& t2)
     } else {
         return false;
     }
+}
+
+/* Deconstruct a ternary op pattern (route). */
+static inline bool isBoxPatternOpTernary(Tree box, Node& n, Tree& t1, Tree& t2, Tree& t3)
+{
+    if (isBoxRoute(box, t1, t2, t3)) {
+        n = box->node();
+        return true;
+    }
+    return false;
 }
 
 /* TA data structures. */
@@ -86,8 +96,18 @@ static Tree subtree(Tree X, int i, const Path& p)
 {
     int  n = (int)p.size();
     Node op(0);
-    Tree x0, x1;
-    if (i < n && isBoxPatternOp(X, op, x0, x1)) {
+    Tree x0, x1, x2;
+    if (i < n && isBoxPatternOpTernary(X, op, x0, x1, x2)) {
+        /* ternary operator */
+        switch (p[i]) {
+            case 0:
+                return subtree(x0, i + 1, p);
+            case 1:
+                return subtree(x1, i + 1, p);
+            default:
+                return subtree(x2, i + 1, p);
+        }
+    } else if (i < n && isBoxPatternOpBinary(X, op, x0, x1)) {
         return subtree((p[i] == 0) ? x0 : x1, i + 1, p);
     } else {
         return X;
@@ -353,7 +373,7 @@ ostream& Automaton::print(ostream& fout) const
 
 static State* make_state(State* state, int r, Tree x, Path& p)
 {
-    Tree id, x0, x1;
+    Tree id, x0, x1, x2;
     Node op(0);
     if (isBoxPatternVar(x, id)) {
         /* variable */
@@ -362,8 +382,25 @@ static State* make_state(State* state, int r, Tree x, Path& p)
         Trans trans(nullptr);
         state->trans.push_back(trans);
         return state->trans.begin()->state;
-    } else if (isBoxPatternOp(x, op, x0, x1)) {
-        /* composite pattern */
+    } else if (isBoxPatternOpTernary(x, op, x0, x1, x2)) {
+        /* ternary composite pattern (Route) */
+        Rule rule(r, nullptr);
+        state->rules.push_back(rule);
+        Trans trans(op, 3);
+        state->trans.push_back(trans);
+        State* next = state->trans.begin()->state;
+        p.push_back(0);
+        next = make_state(next, r, x0, p);
+        p.pop_back();
+        p.push_back(1);
+        next = make_state(next, r, x1, p);
+        p.pop_back();
+        p.push_back(2);
+        next = make_state(next, r, x2, p);
+        p.pop_back();
+        return next;
+    } else if (isBoxPatternOpBinary(x, op, x0, x1)) {
+        /* binary composite pattern */
         Rule rule(r, nullptr);
         state->rules.push_back(rule);
         Trans trans(op, 2);
@@ -551,6 +588,7 @@ Automaton* make_pattern_matcher(Tree R)
    NOTE: The lists of rules and patterns are actually delivered in reverse
    order by the parser, so we have to reverse them on the fly. */
 {
+    FAUST_STATS_BUILD_TIMER();
     Automaton*            A = new Automaton;
     int                   n = len(R), r = n;
     State*                start = new State;
@@ -685,8 +723,27 @@ static int apply_pattern_matcher_internal(Automaton* A, int s, Tree X, vector<Su
                     return s;
                 }
             } else if (t->is_op_trans(op)) {
-                Tree x0, x1;
-                if (isBoxPatternOp(X, op1, x0, x1) && op == op1) {
+                Tree x0, x1, x2;
+                Node op1(0);
+                if (isBoxPatternOpTernary(X, op1, x0, x1, x2) && op == op1) {
+                    /* transition on ternary operation symbol */
+#ifdef DEBUG
+                    cerr << "state " << s << ", " << op << ": goto state " << t->state->s << endl;
+#endif
+                    add_subst(subst, A, s);
+                    s = t->state->s;
+                    if (s >= 0) {
+                        s = apply_pattern_matcher_internal(A, s, x0, subst);
+                    }
+                    if (s >= 0) {
+                        s = apply_pattern_matcher_internal(A, s, x1, subst);
+                    }
+                    if (s >= 0) {
+                        s = apply_pattern_matcher_internal(A, s, x2, subst);
+                    }
+                    return s;
+                }
+                if (isBoxPatternOpBinary(X, op1, x0, x1) && op == op1) {
                     /* transition on operation symbol */
 #ifdef DEBUG
                     cerr << "state " << s << ", " << op << ": goto state " << t->state->s << endl;
@@ -734,6 +791,7 @@ int apply_pattern_matcher(Automaton*    A,  // automaton
                           Tree&         C,  // output closure (if any)
                           vector<Tree>& E)  // modified output environments
 {
+    FAUST_STATS_APPLY_TIMER();
     int           n = A->n_rules();
     vector<Subst> subst(n, Subst());
     /* perform matching, record variable substitutions */

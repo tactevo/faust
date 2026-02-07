@@ -145,8 +145,8 @@ class CInstVisitor : public TextInstVisitor {
         gFunctionSymbolTable["tanfx"]       = true;
 
         // Polymath mapping int version
-        fPolyMathLibTable["min_i"] = "min";
-        fPolyMathLibTable["max_i"] = "max";
+        fPolyMathLibTable["min_i"] = "faustmini";
+        fPolyMathLibTable["max_i"] = "faustmaxi";
 
         // Polymath mapping float version
         fPolyMathLibTable["min_f"] = "fminf";
@@ -263,6 +263,8 @@ class CInstVisitor : public TextInstVisitor {
         EndLine();
     }
 
+    virtual void visit(NewDSPInst* inst) { *fOut << "calloc(1, sizeof(" << inst->fName << "))"; }
+
     virtual void visit(DeclareVarInst* inst)
     {
         if (inst->fAddress->isStaticStruct()) {
@@ -375,31 +377,10 @@ class CInstVisitor : public TextInstVisitor {
     // TODO : does not work, put this code in a function
     virtual void visit(BitcastInst* inst)
     {
-        switch (inst->fType->getType()) {
-            case Typed::kInt32:
-                *fOut << "*((int*)&";
-                inst->fInst->accept(this);
-                *fOut << ")";
-                break;
-            case Typed::kInt64:
-                *fOut << "*((int64_t*)&";
-                inst->fInst->accept(this);
-                *fOut << ")";
-                break;
-            case Typed::kFloat:
-                *fOut << "*((float*)&";
-                inst->fInst->accept(this);
-                *fOut << ")";
-                break;
-            case Typed::kDouble:
-                *fOut << "*((double*)&";
-                inst->fInst->accept(this);
-                *fOut << ")";
-                break;
-            default:
-                faustassert(false);
-                break;
-        }
+        std::string type = fTypeManager->generateType(inst->fType);
+        *fOut << "*((" << type << "*(&";
+        inst->fInst->accept(this);
+        *fOut << ")";
     }
 
     // Generate standard funcall (not 'method' like funcall...)
@@ -473,6 +454,28 @@ class CInstVisitor : public TextInstVisitor {
             *fOut << "}";
             tab(fTab, *fOut);
         }
+    }
+
+    virtual void visit(ModuleInst* inst)
+    {
+        *fOut << "typedef struct {";
+        fTab++;
+        tab(fTab, *fOut);
+        inst->fDSPStruct->accept(this);
+        tab(fTab, *fOut);
+        back(1, *fOut);
+        *fOut << "} " << inst->fName << ";";
+        tab(fTab, *fOut);
+        // TODO
+        // fTab--;
+        inst->fGlobals->accept(this);
+        tab(fTab, *fOut);
+        for (const auto& it : inst->fFunctions) {
+            tab(fTab, *fOut);
+            it->accept(this);
+        }
+        fTab--;
+        tab(fTab, *fOut);
     }
 
     static void cleanup() { gFunctionSymbolTable.clear(); }

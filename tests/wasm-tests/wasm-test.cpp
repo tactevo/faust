@@ -69,6 +69,9 @@ int main(int argc, const char** argv)
   
         cout << "getName " << factory->getName() << endl;
         cout << "getSHAKey " << factory->getSHAKey() << endl;
+    
+        string json = factory->getJSON();
+        cout << "getJSON " << json << endl;
         
         dsp* DSP = factory->createDSPInstance();
         if (!DSP) {
@@ -125,7 +128,7 @@ int main(int argc, const char** argv)
         }
         
        // Write bitcode file
-        bool res = writeWasmDSPFactoryToMachineFile(factory, tempPath);
+        bool res = writeWasmDSPFactoryToBitcodeFile(factory, tempPath);
         if (!res) {
             cerr << "Cannot write bitcode file "<< endl;
             exit(EXIT_FAILURE);
@@ -175,10 +178,10 @@ int main(int argc, const char** argv)
     }
     
     cout << "=============================\n";
-    cout << "Test readWasmDSPFactoryFromMachineFile\n";
+    cout << "Test readWasmDSPFactoryFromBitcodeFile\n";
     {
         // Read bitcode file
-        wasm_dsp_factory* factory = readWasmDSPFactoryFromMachineFile(tempPath, error_msg);
+        wasm_dsp_factory* factory = readWasmDSPFactoryFromBitcodeFile(tempPath, error_msg);
         if (!factory) {
             cerr << "Cannot create factory : " << error_msg;
             exit(EXIT_FAILURE);
@@ -211,4 +214,3 @@ int main(int argc, const char** argv)
 
     return 0;
 }
-

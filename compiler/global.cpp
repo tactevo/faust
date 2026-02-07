@@ -127,10 +127,12 @@ extern FILE*       FAUSTin;
 extern const char* FAUSTfilename;
 
 // Garbageable globals
-list<Garbageable*> global::gObjectTable;
+list<Garbageable*> global::gRawObjectTable;
+list<Garbageable*> global::gArrayObjectTable;
 bool               global::gHeapCleanup = false;
 
-// Just after gObjectTable initialisation for FaustAlgebra constructor to correctly work
+// Just after gRawObjectTable/gArrayObjectTable initialisation for FaustAlgebra constructor to
+// correctly work
 itv::interval_algebra gAlgebra;
 
 global::global()
@@ -529,6 +531,10 @@ void global::reset()
     gCountInferences = 0;
     gCountMaximal    = 0;
 
+#ifdef FIR_BUILD
+    gStats.reset();  // Reset compiler statistics
+#endif
+
     gDummyInput = 10000;
 
     gBoxSlotNumber = 0;
@@ -578,24 +584,25 @@ void global::reset()
     gCodeboxVisitor = nullptr;  // Will be (possibly) allocated in Codebox backend
 #endif
 
-    gHelpSwitch        = false;
-    gVersionSwitch     = false;
-    gLibDirSwitch      = false;
-    gIncludeDirSwitch  = false;
-    gArchDirSwitch     = false;
-    gDspDirSwitch      = false;
-    gPathListSwitch    = false;
-    gGraphSwitch       = false;
-    gDrawPSSwitch      = false;
-    gDrawSVGSwitch     = false;
-    gVHDLTrace         = false;
-    gVHDLFloatEncoding = false;
-    gFPGAMemory        = 0;
-    gPrintXMLSwitch    = false;
-    gPrintJSONSwitch   = false;
-    gPrintDocSwitch    = false;
-    gArchFile          = "";
-    gExportDSP         = false;
+    gHelpSwitch          = false;
+    gVersionSwitch       = false;
+    gLibDirSwitch        = false;
+    gIncludeDirSwitch    = false;
+    gArchDirSwitch       = false;
+    gDspDirSwitch        = false;
+    gPathListSwitch      = false;
+    gGraphSwitch         = false;
+    gDrawPSSwitch        = false;
+    gDrawSVGSwitch       = false;
+    gVHDLTrace           = false;
+    gVHDLFloatEncoding   = false;
+    gFPGAMemory          = 0;
+    gFPGAMemoryThreshold = 4;
+    gPrintXMLSwitch      = false;
+    gPrintJSONSwitch     = false;
+    gPrintDocSwitch      = false;
+    gArchFile            = "";
+    gExportDSP           = false;
 
     gTimeout = 120;  // Time out to abort compiler (in seconds)
 
@@ -791,6 +798,9 @@ void global::printCompilationOptions(stringstream& dst, bool backend)
     if (gFPGAMemory > 0) {
         dst << "-fpga-mem " << gFPGAMemory << " ";
     }
+    if (gFPGAMemoryThreshold > 0) {
+        dst << "-fpga-mem-th " << gFPGAMemoryThreshold << " ";
+    }
     if (gOneSample) {
         dst << "-os ";
     }
@@ -983,14 +993,32 @@ BasicTyped* global::genBasicTyped(Typed::VarType type)
     return gTypeTable[new_type];
 }
 
+void global::clearVarTypeTable()
+{
+    gVarTypeTable.clear();
+}
+
+Typed* global::findVarType(const string& name) const
+{
+    auto it = gVarTypeTable.find(name);
+    return (it != gVarTypeTable.end()) ? it->second : nullptr;
+}
+
+void global::registerVarType(const string& name, Typed* type)
+{
+    gVarTypeTable[name] = type;
+}
+
 void global::setVarType(const string& name, Typed::VarType type)
 {
-    gVarTypeTable[name] = genBasicTyped(type);
+    registerVarType(name, genBasicTyped(type));
 }
 
 Typed::VarType global::getVarType(const string& name)
 {
-    return gVarTypeTable[name]->getType();
+    Typed* var_type = findVarType(name);
+    faustassert(var_type);
+    return var_type->getType();
 }
 
 global::~global()
@@ -1254,8 +1282,12 @@ bool global::processCmdline(int argc, const char* argv[])
             gVHDLComponentsFile = std::string(argv[i + 1]);
             i += 2;
 
-        } else if (isCmd(argv[i], "-fpga-mem", "-fpga-mem") && (i + 1 < argc)) {
+        } else if (isCmd(argv[i], "-fpga-mem", "--fpga-mem") && (i + 1 < argc)) {
             gFPGAMemory = std::atoi(argv[i + 1]);
+            i += 2;
+
+        } else if (isCmd(argv[i], "-fpga-mem-th", "--fpga-mem-th") && (i + 1 < argc)) {
+            gFPGAMemoryThreshold = std::atoi(argv[i + 1]);
             i += 2;
 
         } else if (isCmd(argv[i], "-style", "--svgstyle")) {
@@ -1454,6 +1486,10 @@ bool global::processCmdline(int argc, const char* argv[])
 
         } else if (isCmd(argv[i], "-norm2", "--normalized-form2")) {
             gDumpNorm = 2;
+            i += 1;
+
+        } else if (isCmd(argv[i], "-norm3", "--normalized-form3")) {
+            gDumpNorm = 3;
             i += 1;
 
         } else if (isCmd(argv[i], "-cn", "--class-name") && (i + 1 < argc)) {
@@ -1673,7 +1709,6 @@ bool global::processCmdline(int argc, const char* argv[])
     if (gRustNoLibm && gOutputLang != "rust") {
         throw faustexception("ERROR : '-rnlm' option can only be used with 'rust' backend\n");
     }
-
     if (!gRustNoTraitSwitch && gInPlace && gOutputLang == "rust") {
         throw faustexception(
             "ERROR : for 'rust' the '-inpl' flag must be combined with '-rnt' flag\n");
@@ -1692,8 +1727,7 @@ bool global::processCmdline(int argc, const char* argv[])
         !startWith(gOutputLang, "cmajor") && gOutputLang != "fir" && gOutputLang != "rust") {
         throw faustexception(
             "ERROR : '-os' option can only be used with 'cpp', 'c', 'cmajor', 'dlang', 'fir' or "
-            "'rust'"
-            "backends\n");
+            "'rust' backends\n");
     }
 
     if (gExtControl && gOutputLang != "cpp" && gOutputLang != "c" && gOutputLang != "cmajor" &&
@@ -2088,7 +2122,7 @@ string global::printVersion()
 #ifdef LLVM_BUILD
     sstr << "Build with LLVM version " << LLVM_VERSION << "\n";
 #endif
-    sstr << "Copyright (C) 2002-2025, GRAME - Centre National de Creation Musicale. All rights "
+    sstr << "Copyright (C) 2002-2026, GRAME - Centre National de Creation Musicale. All rights "
             "reserved. \n";
     return sstr.str();
 }
@@ -2372,7 +2406,12 @@ string global::printHelp()
             "VHDL backend."
          << endl;
     sstr << tab
-         << "-fpga-mem <n>  --fpga-mem <n>           FPGA block ram max size, used in -mem1/-mem2 "
+         << "-fpga-mem <n>     --fpga-mem <n>        FPGA block ram max size, used in -mem1/-mem2 "
+            "mode."
+         << endl;
+    sstr << tab
+         << "-fpga-mem-th <n>  --fpga-mem-th <n>     FPGA array size threshold (in unit of the "
+            "memory type), used in -mem1/-mem2 "
             "mode."
          << endl;
 
@@ -2614,7 +2653,109 @@ void global::clear()
     gSignalTrace.clear();
 }
 
+#ifdef FIR_BUILD
+
+void statsTreeCreated()
+{
+    gGlobal->gStats.fTreesCreated++;
+}
+
+void statsTreeReused()
+{
+    gGlobal->gStats.fTreesReused++;
+}
+
+void statsPropertySet()
+{
+    gGlobal->gStats.fPropertySets++;
+}
+
+void statsPropertyGet()
+{
+    gGlobal->gStats.fPropertyGets++;
+}
+
+// Print compiler statistics for performance analysis
+void CompilerStats::print(std::ostream& out) const
+{
+    out << "\n========== COMPILER STATISTICS ==========\n";
+
+    out << "\n--- Phase 1: Parsing ---\n";
+    out << "  (not instrumented)\n";
+
+    out << "\n--- Phase 2: Box Evaluation ---\n";
+    out << "  eval() calls:            " << fEvalCalls << "\n";
+    out << "  eval() cache hits:       " << fEvalCacheHits;
+    if (fEvalCalls > 0) {
+        out << " (" << (100.0 * fEvalCacheHits / fEvalCalls) << "%)";
+    }
+    out << "\n";
+    out << "  eval() cache misses:     " << fEvalCacheMisses << "\n";
+    out << "  Loop detector calls:     " << fLoopDetectorCalls << "\n";
+    out << "  Stack detector calls:    " << fStackDetectorCalls << "\n";
+
+    out << "\n--- Phase 3: Propagation ---\n";
+    out << "  propagate() calls:       " << fPropagateCalls << "\n";
+    out << "  propagate() cache hits:  " << fPropagateCacheHits;
+    if (fPropagateCalls > 0) {
+        out << " (" << (100.0 * fPropagateCacheHits / fPropagateCalls) << "%)";
+    }
+    out << "\n";
+    out << "  propagate() cache misses:" << fPropagateCacheMisses << "\n";
+
+    out << "\n--- Box Type Computation ---\n";
+    out << "  getBoxType() calls:      " << fGetBoxTypeCalls << "\n";
+    out << "  getBoxType() cache hits: " << fGetBoxTypeCacheHits;
+    if (fGetBoxTypeCalls > 0) {
+        out << " (" << (100.0 * fGetBoxTypeCacheHits / fGetBoxTypeCalls) << "%)";
+    }
+    out << "\n";
+    out << "  getBoxType() computed:   " << fGetBoxTypeComputed << "\n";
+
+    out << "\n--- Environment Operations ---\n";
+    out << "  Environment lookups:     " << fEnvLookups << "\n";
+    if (fEnvLookups > 0) {
+        out << "  Average lookup depth:    " << (1.0 * fEnvLookupTotalDepth / fEnvLookups) << "\n";
+    }
+    out << "  Env layers pushed:       " << fEnvLayersPushed << "\n";
+
+    out << "\n--- Pattern Matching ---\n";
+    out << "  build automaton calls:        " << fPatternMatcherBuildCalls << "\n";
+    out << "  build total time (ms):        " << fPatternMatcherBuildTimeMs << "\n";
+    if (fPatternMatcherBuildCalls > 0) {
+        out << "  build avg time (ms):          "
+            << (fPatternMatcherBuildTimeMs / fPatternMatcherBuildCalls) << "\n";
+    }
+    out << "  apply calls:                  " << fPatternMatcherApplyCalls << "\n";
+    out << "  apply total time (ms):        " << fPatternMatcherApplyTimeMs << "\n";
+    if (fPatternMatcherApplyCalls > 0) {
+        out << "  apply avg time (ms):          "
+            << (fPatternMatcherApplyTimeMs / fPatternMatcherApplyCalls) << "\n";
+    }
+
+    out << "\n--- Tree Operations ---\n";
+    out << "  Trees created:           " << fTreesCreated << "\n";
+    out << "  Trees reused (hash):     " << fTreesReused;
+    if (fTreesCreated + fTreesReused > 0) {
+        out << " (" << (100.0 * fTreesReused / (fTreesCreated + fTreesReused)) << "% reuse rate)";
+    }
+    out << "\n";
+    out << "  Property set ops:        " << fPropertySets << "\n";
+    out << "  Property get ops:        " << fPropertyGets << "\n";
+
+    out << "\n--- Iteration Constructs ---\n";
+    out << "  par() iterations:        " << fParIterations << "\n";
+    out << "  seq() iterations:        " << fSeqIterations << "\n";
+    out << "  sum() iterations:        " << fSumIterations << "\n";
+    out << "  prod() iterations:       " << fProdIterations << "\n";
+
+    out << "\n==========================================\n";
+}
+#endif
+
 // Memory management
+
+#ifdef _WIN32
 void Garbageable::cleanup()
 {
     list<Garbageable*>::iterator it;
@@ -2622,17 +2763,13 @@ void Garbageable::cleanup()
     // Here removing the deleted pointer from the list is pointless
     // and takes time, thus we don't do it.
     global::gHeapCleanup = true;
-    for (it = global::gObjectTable.begin(); it != global::gObjectTable.end(); it++) {
-#ifdef _WIN32
+    for (it = global::gRawObjectTable.begin(); it != global::gRawObjectTable.end(); it++) {
         // Hack : "this" and actual pointer are not the same: destructor cannot be called...
         Garbageable::operator delete(*it);
-#else
-        delete (*it);
-#endif
     }
 
     // Reset to default state
-    global::gObjectTable.clear();
+    global::gRawObjectTable.clear();
     global::gHeapCleanup = false;
 }
 
@@ -2640,7 +2777,7 @@ void* Garbageable::operator new(size_t size)
 {
     // HACK : add 16 bytes to avoid unsolved memory smashing bug...
     Garbageable* res = (Garbageable*)malloc(size + 16);
-    global::gObjectTable.push_front(res);
+    global::gRawObjectTable.push_front(res);
     return res;
 }
 
@@ -2649,7 +2786,7 @@ void Garbageable::operator delete(void* ptr)
     // We may have cases when a pointer will be deleted during
     // a compilation, thus the pointer has to be removed from the list.
     if (!global::gHeapCleanup) {
-        global::gObjectTable.remove(static_cast<Garbageable*>(ptr));
+        global::gRawObjectTable.remove(static_cast<Garbageable*>(ptr));
     }
     free(ptr);
 }
@@ -2658,7 +2795,7 @@ void* Garbageable::operator new[](size_t size)
 {
     // HACK : add 16 bytes to avoid unsolved memory smashing bug...
     Garbageable* res = (Garbageable*)malloc(size + 16);
-    global::gObjectTable.push_front(res);
+    global::gRawObjectTable.push_front(res);
     return res;
 }
 
@@ -2667,10 +2804,64 @@ void Garbageable::operator delete[](void* ptr)
     // We may have cases when a pointer will be deleted during
     // a compilation, thus the pointer has to be removed from the list.
     if (!global::gHeapCleanup) {
-        global::gObjectTable.remove(static_cast<Garbageable*>(ptr));
+        global::gRawObjectTable.remove(static_cast<Garbageable*>(ptr));
     }
     free(ptr);
 }
+
+#else
+
+void Garbageable::cleanup()
+{
+    // Here removing the deleted pointer from the list is pointless
+    // and takes time, thus we don't do it.
+    global::gHeapCleanup = true;
+
+    for (Garbageable* obj : global::gRawObjectTable) {
+        delete obj;
+    }
+    global::gRawObjectTable.clear();
+
+    for (Garbageable* obj : global::gArrayObjectTable) {
+        delete[] obj;
+    }
+    global::gArrayObjectTable.clear();
+
+    // Reset to default state
+    global::gHeapCleanup = false;
+}
+
+void* Garbageable::operator new(size_t size)
+{
+    Garbageable* res = static_cast<Garbageable*>(::operator new(size));
+    global::gRawObjectTable.push_front(res);
+    return res;
+}
+
+void Garbageable::operator delete(void* ptr)
+{
+    if (!global::gHeapCleanup) {
+        global::gRawObjectTable.remove(static_cast<Garbageable*>(ptr));
+    }
+    ::operator delete(ptr);
+}
+
+void* Garbageable::operator new[](size_t size)
+{
+    Garbageable* res = static_cast<Garbageable*>(::operator new[](size));
+    global::gArrayObjectTable.push_front(res);
+    return res;
+}
+
+void Garbageable::operator delete[](void* ptr)
+{
+    if (!global::gHeapCleanup) {
+        global::gArrayObjectTable.remove(static_cast<Garbageable*>(ptr));
+    }
+    ::operator delete[](ptr);
+}
+
+#endif
 
 /*
     Threaded calls API: the compilation code is executed in a separate

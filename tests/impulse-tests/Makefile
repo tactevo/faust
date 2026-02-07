@@ -19,11 +19,19 @@ GCCOPTIONS := -O3 -I../../architecture -I/usr/local/include/ap_fixed -Iarchs -pt
 outdir ?= float
 arch ?= ./archs/impulsearch.cpp
 FAUSTOPTIONS := -lang cpp -double -i -a $(arch)
+CLANG_TIDY ?= clang-tidy
+CLANG_TIDY_OUTDIR ?= cpp/double
+CLANG_TIDY_CHECKS ?= clang-analyzer-*,-clang-analyzer-cplusplus.NewDeleteLeaks
+CLANG_TIDY_ARGS ?=
+CLANG_TIDY_CXXFLAGS ?= -std=c++11 -I../../architecture -I/usr/local/include/ap_fixed -Iarchs -pthread
+CLANG_TIDY_FAUSTOPTIONS ?= -I dsp -double
+CLANG_TIDY_ARCH ?= impulsearch.cpp
 
-.PHONY: test reference
+.PHONY: test reference clang-tidy clang-tidy-cpp asan-cpp
 
 dspfiles := $(wildcard dsp/*.dsp)
 mutefiles = $(dspfiles:dsp/%.dsp=ir/mute/%.ir)
+CLANG_TIDY_CPP_FILES := $(dspfiles:dsp/%.dsp=ir/$(CLANG_TIDY_OUTDIR)/%.cpp)
 
 TOOLSOPTIONS := -std=c++14 -O3 -I../../architecture
 LIB ?= ../../build/lib/libfaust.a
@@ -97,6 +105,8 @@ help:
 	@echo " 'test-type'              : test signal typing intermediate step"
 	@echo " 'test-fir'               : test FIR intermediate step"
 	@echo " 'test-cpp'               : test C++ generation step"
+	@echo " 'clang-tidy'             : run clang-tidy (clang-analyzer checks like uninit/UB/null deref; static-only) on generated C++ in ir/$(CLANG_TIDY_OUTDIR)"
+	@echo " 'asan-cpp'               : build+run generated C++ with AddressSanitizer (runtime checks for heap/stack/UAF/OOB)"
 	@echo " 'bench'                  : benchmark using faustbench-llvm and faustbench"
 	@echo " 'interp-tracer'          : test using the interp-tracer tool"
 	@echo " 'tools'                  : builds binary tools used by the tests"
@@ -124,7 +134,7 @@ travis:
 # automatic github action test
 github_action:
 	$(MAKE) -f Make.rust outdir=rust/inpl CARGOOPTIONS="" FAUSTOPTIONS="-I ../../libraries/ -double -inpl -rnt -a archs/rust/architecture_inpl.rs"
-	$(MAKE) -f Make.rust outdir=rust/no CARGOOPTIONS="" FAUSTOPTIONS="-I ../../libraries/ -double -a archs/rust/architecture_trait.rs"
+	$(MAKE) -f Make.rust outdir=rust/no CARGOOPTIONS="" FAUSTOPTIONS="-I ../../libraries/ -double -a archs/rust/architecture_trait_ff64.rs"
 	$(MAKE) -f Make.gcc outdir=cpp/double lang=cpp arch=impulsearch.cpp FAUSTOPTIONS="-I ../../libraries/ -I dsp -double"
 
 #########################################################################
@@ -177,6 +187,9 @@ fx1:
 cpp1:
 	$(MAKE) -f Make.gcc outdir=cpp1/double/mem0  lang=cpp arch=impulsearch6.cpp FAUSTOPTIONS="-I dsp -double -mem"
 	$(MAKE) -f Make.gcc outdir=cpp1/double/mem1  lang=cpp arch=impulsearch6.cpp FAUSTOPTIONS="-I dsp -double -it -mem1"
+	$(MAKE) -f Make.gcc outdir=cpp1/double/mem1fpgamemth0  lang=cpp arch=impulsearch6.cpp FAUSTOPTIONS="-I dsp -double -it -mem1 -fpga-mem-th 0"
+	$(MAKE) -f Make.gcc outdir=cpp1/double/mem1fpgamemth2  lang=cpp arch=impulsearch6.cpp FAUSTOPTIONS="-I dsp -double -it -mem1 -fpga-mem-th 2"
+	$(MAKE) -f Make.gcc outdir=cpp1/double/mem1fpgamemth8  lang=cpp arch=impulsearch6.cpp FAUSTOPTIONS="-I dsp -double -it -mem1 -fpga-mem-th 8"
 
 cpp2:
 	$(MAKE) -f Make.gcc outdir=cpp2/double/ec  lang=cpp arch=impulsearch7.cpp FAUSTOPTIONS="-I dsp -double -ec"
@@ -257,7 +270,7 @@ c1:
 	$(MAKE) -f Make.gcc outdir=c1/double/mem2it  lang=c arch=impulsearch9qua.cpp FAUSTOPTIONS="-I dsp -double -mem2 -it"
 	$(MAKE) -f Make.gcc outdir=c1/double/fpga10mem2it  lang=c arch=impulsearch9qua.cpp FAUSTOPTIONS="-I dsp -double -fpga-mem 10  -mem2 -it"
 	$(MAKE) -f Make.gcc outdir=c1/double/fpga100mem2it  lang=c arch=impulsearch9qua.cpp FAUSTOPTIONS="-I dsp -double -fpga-mem 100 -mem2 -it"
-	$(MAKE) -f Make.gcc outdir=c1/double/fpga100mem2it  lang=c arch=impulsearch9qua.cpp FAUSTOPTIONS="-I dsp -double -fpga-mem 1000 -mem2 -it"
+	$(MAKE) -f Make.gcc outdir=c1/double/fpga1000mem2it  lang=c arch=impulsearch9qua.cpp FAUSTOPTIONS="-I dsp -double -fpga-mem 1000 -mem2 -it"
 	$(MAKE) -f Make.gcc outdir=c1/double/vecfpga100mem2it  lang=c arch=impulsearch9qua.cpp FAUSTOPTIONS="-I dsp -double -t 0 -vec -fpga-mem 1000 -mem2 -it"
 
 c2:
@@ -377,15 +390,18 @@ interp1:
 #########################################################################
 # Rust backend
 rust:
+	$(MAKE) -f Make.rust outdir=rust/3232 precision=1.4 CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -single -a archs/rust/architecture_trait_ff32.rs"
+	$(MAKE) -f Make.rust outdir=rust/3264 precision=1 CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -a archs/rust/architecture_trait_ff32.rs"
+	$(MAKE) -f Make.rust outdir=rust/6432 precision=24 CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -single -a archs/rust/architecture_trait_ff64.rs"
+	$(MAKE) -f Make.rust outdir=rust/6464 CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -a archs/rust/architecture_trait_ff64.rs"
 	$(MAKE) -f Make.rust outdir=rust/inpl CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -inpl -rnt -a archs/rust/architecture_inpl.rs"
 	$(MAKE) -f Make.rust outdir=rust/osec CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -os -ec -rnt -a archs/rust/architecture_osecrnt.rs"
 	$(MAKE) -f Make.rust outdir=rust/os CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -os -rnt -a archs/rust/architecture_osrnt.rs"
 	$(MAKE) -f Make.rust outdir=rust/cm CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -cm -a archs/rust/architecture_cm.rs"
 	$(MAKE) -f Make.rust outdir=rust/ecrnt CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -ec -rnt -a archs/rust/architecture_ecrnt.rs"
-	$(MAKE) -f Make.rust outdir=rust/no CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -a archs/rust/architecture_trait.rs"
-	$(MAKE) -f Make.rust outdir=rust/fp FAUSTOPTIONS="-I dsp -double -fp -a archs/rust/architecture_trait.rs"
-	$(MAKE) -f Make.rust outdir=rust/vec4 CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -vec -vs 4 -a archs/rust/architecture_trait.rs"
-	$(MAKE) -f Make.rust outdir=rust/vec32 FAUSTOPTIONS="-I dsp -double -vec -vs 32 -a archs/rust/architecture_trait.rs"
+	$(MAKE) -f Make.rust outdir=rust/fp FAUSTOPTIONS="-I dsp -double -fp -a archs/rust/architecture_trait_ff64.rs"
+	$(MAKE) -f Make.rust outdir=rust/vec4 CARGOOPTIONS="" FAUSTOPTIONS="-I dsp -double -vec -vs 4 -a archs/rust/architecture_trait_ff64.rs"
+	$(MAKE) -f Make.rust outdir=rust/vec32 FAUSTOPTIONS="-I dsp -double -vec -vs 32 -a archs/rust/architecture_trait_ff64.rs"
 
 #########################################################################
 # Cmajor backend
@@ -480,6 +496,22 @@ test-fir:
 
 test-cpp:
 	cd dsp && ./cpp-script *.dsp
+
+#########################################################################
+# Static analysis on generated C++ code
+
+clang-tidy: clang-tidy-cpp
+	@find ir/$(CLANG_TIDY_OUTDIR) -name '*.cpp' -type f -print -quit | grep -q . || (echo "No generated C++ in ir/$(CLANG_TIDY_OUTDIR)."; exit 1)
+	@find ir/$(CLANG_TIDY_OUTDIR) -name '*.cpp' -type f -exec $(CLANG_TIDY) $(CLANG_TIDY_ARGS) -checks="$(CLANG_TIDY_CHECKS)" {} -- $(CLANG_TIDY_CXXFLAGS) \;
+
+clang-tidy-cpp:
+	$(MAKE) -f Make.gcc outdir=$(CLANG_TIDY_OUTDIR) lang=cpp arch=$(CLANG_TIDY_ARCH) FAUSTOPTIONS="$(CLANG_TIDY_FAUSTOPTIONS)" ir/$(CLANG_TIDY_OUTDIR) $(CLANG_TIDY_CPP_FILES)
+
+#########################################################################
+# Runtime sanitizer on generated C++ code
+
+asan-cpp:
+	$(MAKE) -f Make.gcc outdir=cpp/asan/double lang=cpp arch=impulsearch.cpp FAUSTOPTIONS="-I dsp -double" SAN=asan
 
 #########################################################################
 # Benchmark using faustbench-llvm and faustbench

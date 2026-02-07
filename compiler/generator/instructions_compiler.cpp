@@ -37,11 +37,15 @@
 #include "sigRetiming.hh"
 #include "sigToGraph.hh"
 #include "signal2Elementary.hh"
+#include "signalFIRCompiler.hh"
 #include "signalVisitor.hh"
 #include "sigprint.hh"
 #include "sigtyperules.hh"
 #include "timing.hh"
 #include "xtended.hh"
+
+#include "c_instructions.hh"
+#include "cpp_instructions.hh"
 
 using namespace std;
 
@@ -61,6 +65,11 @@ ValueInst* InstructionsCompiler::genCastedOutput(int type, ValueInst* value)
 {
     bool need_cast = (type == kInt) || !gGlobal->gFAUSTFLOAT2Internal;
     return (need_cast) ? IB::genCastFloatMacroInst(value) : value;
+}
+
+ValueInst* InstructionsCompiler::genCastedOutput(ValueInst* value)
+{
+    return (gGlobal->gFAUSTFLOAT2Internal) ? value : IB::genCastFloatMacroInst(value);
 }
 
 ValueInst* InstructionsCompiler::genCastedInput(ValueInst* value)
@@ -103,6 +112,19 @@ Tree InstructionsCompiler::prepare(Tree LS)
         SignalTypePrinter types(L1);
         std::cout << types.print();
         throw faustexception("Dump signal type finished...\n");
+    } else if (gGlobal->gDumpNorm == 3) {
+        /*
+        SignalFIRCompiler fir_compiler(fContainer->inputs(), fContainer->outputs(), L1);
+        // dump2FIR(fir_compiler.genFIRModule());
+        ModuleInst* fir_module = fir_compiler.genFIRModule();
+
+        std::stringstream stream;
+        CPPInstVisitor    visitor(&stream, fir_module->getName());
+        // CInstVisitor    visitor(&stream, fir_module->getName());
+        fir_module->accept(&visitor);
+        std::cout << stream.str();
+        throw faustexception("Dump FIR compiler finished...\n");
+        */
     }
 
     // No more table privatisation
@@ -968,9 +990,9 @@ ValueInst* InstructionsCompiler::generateInput(Tree sig, int idx)
 ValueInst* InstructionsCompiler::generateBinOp(Tree sig, int opcode, Tree a1, Tree a2)
 {
     if ((opcode == kMul) && isMinusOne(a1)) {
-        return IB::genMinusInst(CS(a2));
+        return IB::genNeg(CS(a2));
     } else if ((opcode == kMul) && isMinusOne(a2)) {
-        return IB::genMinusInst(CS(a1));
+        return IB::genNeg(CS(a1));
     } else {
         return generateCacheCode(sig, IB::genBinopInst(opcode, CS(a1), CS(a2)));
     }
@@ -1301,8 +1323,7 @@ ValueInst* InstructionsCompiler::generateBargraphAux(Tree sig, Tree path, ValueI
     ::Type t = getCertifiedSigType(sig);
 
     // Cast to external float
-    ValueInst*    val = (gGlobal->gFAUSTFLOAT2Internal) ? exp : IB::genCastFloatMacroInst(exp);
-    StoreVarInst* res = IB::genStoreStructVar(varname, val);
+    StoreVarInst* res = IB::genStoreStructVar(varname, genCastedOutput(exp));
 
     switch (t->variability()) {
         case kKonst:
@@ -1323,7 +1344,7 @@ ValueInst* InstructionsCompiler::generateBargraphAux(Tree sig, Tree path, ValueI
             break;
     }
 
-    return generateCacheCode(sig, IB::genLoadStructVar(varname));
+    return generateCacheCode(sig, genCastedInput(IB::genLoadStructVar(varname)));
 }
 
 ValueInst* InstructionsCompiler::generateVBargraph(Tree sig, Tree path, ValueInst* exp)

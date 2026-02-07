@@ -121,6 +121,8 @@ class LIBFAUST_API wasm_dsp_factory : public wasm_dsp_factory_imp, public faust_
     std::vector<std::string> getLibraryList() override;
     std::vector<std::string> getIncludePathnames() override;
 
+    std::string getJSON() override;
+
     wasm_dsp* createDSPInstance() override;
 
     /** Register the math functions that the FAUST‑generated WASM expects. */
@@ -202,6 +204,8 @@ class LIBFAUST_API wasm_dsp_factory : public dsp_factory, public faust_smartable
 
     std::vector<std::string> getWarningMessages();
 
+    std::string getJSON();
+
     JSONUIDecoderBase* getDecoder() { return fDecoder; }
 
     wasm_dsp* createDSPInstance();
@@ -215,14 +219,7 @@ class LIBFAUST_API wasm_dsp_factory : public dsp_factory, public faust_smartable
 
     std::string getBinaryCode();
 
-    static wasm_dsp_factory* readWasmDSPFactoryFromMachineFile2(
-        const std::string& machine_code_path);
-
-    static wasm_dsp_factory* readWasmDSPFactoryFromMachine2(const std::string& machine_code);
-
     static wasm_dsp_factory* createWasmDSPFactory(int instance, const std::string& json);
-
-    static bool deleteWasmDSPFactory2(wasm_dsp_factory* factory);
 
     static std::string extractJSON(const std::string& code);
 
@@ -239,15 +236,15 @@ LIBFAUST_API bool deleteWasmDSPFactory(wasm_dsp_factory* factory);
 
 LIBFAUST_API void deleteAllWasmDSPFactories();
 
-LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromMachine(const std::string& machine_code,
+LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromBitcode(const std::string& bit_code,
                                                              std::string&       error_msg);
 
-LIBFAUST_API std::string writeWasmDSPFactoryToMachine(wasm_dsp_factory* factory);
+LIBFAUST_API std::string writeWasmDSPFactoryToBitcode(wasm_dsp_factory* factory);
 
-LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromMachineFile(
-    const std::string& machine_code_path, std::string& error_msg);
+LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromBitcodeFile(const std::string& bit_code_path,
+                                                                 std::string&       error_msg);
 
-LIBFAUST_API bool writeWasmDSPFactoryToMachineFile(wasm_dsp_factory*  factory,
-                                                   const std::string& machine_code_path);
+LIBFAUST_API bool writeWasmDSPFactoryToBitcodeFile(wasm_dsp_factory*  factory,
+                                                   const std::string& bit_code_path);
 
 #endif

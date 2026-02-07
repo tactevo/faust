@@ -105,6 +105,9 @@ class LIBFAUST_API wasm_dsp_factory : public dsp_factory {
 
         /* Return factory expanded DSP code */
         std::string getDSPCode();
+        
+        /* Return JSON description of the DSP (UI + metadata) */
+        std::string getJSON();
 
         /* Return factory compile options */
         std::string getCompileOptions();
@@ -241,94 +244,53 @@ LIBFAUST_API void deleteAllWasmDSPFactories();
 LIBFAUST_API std::vector<std::string> getAllWasmDSPFactories();
 
 /**
- * Create a Faust DSP factory from a machine code string. Note that the library keeps an internal cache of all
+ * Create a Faust DSP factory from a bitcode string. Note that the library keeps an internal cache of all
  * allocated factories so that the compilation of the same DSP code (that is the same machine code string) will return
  * the same (reference counted) factory pointer. You will have to explicitly use deleteWasmDSPFactory to properly
  * decrement reference counter when the factory is no more needed.
  *
- * @param machine_code - the machine code string
+ * @param bit_code - the bitcode string
  * @param error_msg - the error string to be filled
  *
  * @return the DSP factory on success, otherwise a null pointer.
  */
-LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromMachine(const std::string& machine_code, std::string& error_msg);
+LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromBitcode(const std::string& bit_code, std::string& error_msg);
 
 /**
- * Write a Faust DSP factory into a machine code string.
+ * Write a Faust DSP factory into a bitcode string.
  *
  * @param factory - the DSP factory
  *
- * @return the machine code as a string.
+ * @return the bitcode as a string.
  */
-LIBFAUST_API std::string writeWasmDSPFactoryToMachine(wasm_dsp_factory* factory);
+LIBFAUST_API std::string writeWasmDSPFactoryToBitcode(wasm_dsp_factory* factory);
 
 /**
- * Create a Faust DSP factory from a machine code file. Note that the library keeps an internal cache of all
+ * Create a Faust DSP factory from a bitcode file. Note that the library keeps an internal cache of all
  * allocated factories so that the compilation of the same DSP code (that is the same machine code file) will return
  * the same (reference counted) factory pointer. You will have to explicitly use deleteWasmDSPFactory to properly
  * decrement reference counter when the factory is no more needed.
  *
- * @param machine_code_path - the machine code file pathname
+ * @param bit_code_path - the bitcode file pathname
  * @param error_msg - the error string to be filled
  *
  * @return the DSP factory on success, otherwise a null pointer.
  */
-LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromMachineFile(const std::string& machine_code_path, std::string& error_msg);
+LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromBitcodeFile(const std::string& bit_code_path, std::string& error_msg);
 
 /**
- * Write a Faust DSP factory into a machine code file.
+ * Write a Faust DSP factory into a bitcode file.
  *
  * @param factory - the DSP factory
- * @param machine_code_path - the machine code file pathname
+ * @param bit_code_path - the machine code file pathname
  *
  * @return true on success, false on failure.
  */
-LIBFAUST_API bool writeWasmDSPFactoryToMachineFile(wasm_dsp_factory* factory, const std::string& machine_code_path);
+LIBFAUST_API bool writeWasmDSPFactoryToBitcodeFile(wasm_dsp_factory* factory, const std::string& bit_code_path);
 
 /*!
  @}
  */
-
-#ifdef EMCC
-#include <emscripten.h>
-#include <emscripten/bind.h>
-using namespace emscripten;
-
-EMSCRIPTEN_BINDINGS(CLASS_wasm_dsp_factory)
-{
-    class_<wasm_dsp_factory>("wasm_dsp_factory")
-    .constructor()
-    .function("createDSPInstance", &wasm_dsp_factory::createDSPInstance, allow_raw_pointers())
-    .function("deleteDSPInstance", &wasm_dsp_factory::deleteDSPInstance, allow_raw_pointers())
-    .class_function("readWasmDSPFactoryFromMachineFile2", &wasm_dsp_factory::readWasmDSPFactoryFromMachineFile2,
-                    allow_raw_pointers())
-    .class_function("readWasmDSPFactoryFromMachine2", &wasm_dsp_factory::readWasmDSPFactoryFromMachine2,
-                    allow_raw_pointers())
-    .class_function("createWasmDSPFactory", &wasm_dsp_factory::createWasmDSPFactory, allow_raw_pointers())
-    .class_function("deleteWasmDSPFactory", &wasm_dsp_factory::deleteWasmDSPFactory2, allow_raw_pointers())
-    .class_function("getErrorMessage", &wasm_dsp_factory::getErrorMessage)
-    .class_function("extractJSON", &wasm_dsp_factory::extractJSON, allow_raw_pointers());
-}
-
-EMSCRIPTEN_BINDINGS(CLASS_wasm_dsp)
-{
-    class_<wasm_dsp>("wasm_dsp")
-    .constructor()
-    .function("getNumInputs", &wasm_dsp::getNumInputs, allow_raw_pointers())
-    .function("getNumOutputs", &wasm_dsp::getNumOutputs, allow_raw_pointers())
-    .function("getSampleRate", &wasm_dsp::getSampleRate, allow_raw_pointers())
-    .function("init", &wasm_dsp::init, allow_raw_pointers())
-    .function("instanceInit", &wasm_dsp::instanceInit, allow_raw_pointers())
-    .function("instanceConstants", &wasm_dsp::instanceConstants, allow_raw_pointers())
-    .function("instanceResetUserInterface", &wasm_dsp::instanceResetUserInterface, allow_raw_pointers())
-    .function("instanceClear", &wasm_dsp::instanceClear, allow_raw_pointers())
-    .function("clone", &wasm_dsp::clone, allow_raw_pointers())
-    .function("compute", &wasm_dsp::computeJS, allow_raw_pointers())
-    .function("setParamValue", &wasm_dsp::setParamValue, allow_raw_pointers())
-    .function("getParamValue", &wasm_dsp::getParamValue, allow_raw_pointers());
-}
-
-#endif
 
 #endif
 /************************** END wasm-dsp.h **************************/

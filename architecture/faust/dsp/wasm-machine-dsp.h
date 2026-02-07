@@ -105,6 +105,9 @@ class LIBFAUST_API wasm_dsp_factory : public dsp_factory {
         /* Return factory expanded DSP code */
         std::string getDSPCode();
 
+        /* Return JSON description of the DSP (UI + metadata) */
+        std::string getJSON();
+
         /* Return factory compile options */
         std::string getCompileOptions();
 
@@ -178,7 +181,7 @@ LIBFAUST_API std::vector<std::string> getAllWasmDSPFactories();
  *
  * @return the DSP factory on success, otherwise a null pointer.
  */
-LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromMachine(const std::string& machine_code, std::string& error_msg);
+LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromBitcode(const std::string& machine_code, std::string& error_msg);
 
 /**
  * Write a Faust DSP factory into a machine code string.
@@ -187,7 +190,7 @@ LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromMachine(const std::string& 
  *
  * @return the machine code as a string.
  */
-LIBFAUST_API std::string writeWasmDSPFactoryToMachine(wasm_dsp_factory* factory);
+LIBFAUST_API std::string writeWasmDSPFactoryToBitcode(wasm_dsp_factory* factory);
 
 /**
  * Create a Faust DSP factory from a machine code file. Note that the library keeps an internal cache of all
@@ -200,7 +203,7 @@ LIBFAUST_API std::string writeWasmDSPFactoryToMachine(wasm_dsp_factory* factory)
  *
  * @return the DSP factory on success, otherwise a null pointer.
  */
-LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromMachineFile(const std::string& machine_code_path, std::string& error_msg);
+LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromBitcodeFile(const std::string& machine_code_path, std::string& error_msg);
 
 /**
  * Write a Faust DSP factory into a machine code file.
@@ -209,7 +212,7 @@ LIBFAUST_API wasm_dsp_factory* readWasmDSPFactoryFromMachineFile(const std::stri
  * @param machine_code_path - the machine code file pathname
  *
  */
-LIBFAUST_API void writeWasmDSPFactoryToMachineFile(wasm_dsp_factory* factory, const std::string& machine_code_path);
+LIBFAUST_API void writeWasmDSPFactoryToBitcode(wasm_dsp_factory* factory, const std::string& machine_code_path);
 
 /*!
  @}

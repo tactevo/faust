@@ -32,6 +32,7 @@
 #include "faustgen_factory.h"
 #include "faustgen~.h"
 
+#include <cctype>
 #include <faust/dsp/libfaust.h>
 #include <faust/dsp/poly-dsp.h>
 
@@ -114,6 +115,7 @@ static string getSerialNumber()
             CFStringGetCString((CFStringRef)serialNumberAsCFString, serial_name, 256, kCFStringEncodingMacRoman);
             string res = string(serial_name) + string(getCodeSize());
             CFRelease(serialNumberAsCFString);
+            IOObjectRelease(platformExpert);
             return res;
         }
         IOObjectRelease(platformExpert);
@@ -168,6 +170,19 @@ static string getFolderFromPath(const string& full_path)
     return (first != string::npos) ? full_path.substr(first, full_path.size() - first) : "";
 }
 
+static bool isSafePathSegment(const std::string& value)
+{
+    // Allow common filesystem characters while rejecting anything that could be
+    // interpreted by the shell even when wrapped in double quotes.
+    static const std::string forbidden = "\"`$|&;<>%\n\r";
+    for (unsigned char c : value) {
+        if (c < 0x20 || c == 0x7F) return false;   // reject control chars
+        if (forbidden.find(static_cast<char>(c)) != string::npos) return false;
+    }
+    return true;
+}
+
+// Build a factory and preload defaults/resource paths for a given DSP name
 faustgen_factory::faustgen_factory(const string& name)
 {
     m_siginlets = 0;
@@ -179,7 +194,7 @@ faustgen_factory::faustgen_factory(const string& name)
     fBitCodeSize = 0;
     fBitCode = nullptr;
     fSourceCodeSize = 0;
-    fSourceCode = nullptr;
+    fSourceCode = sysmem_newhandleclear(1); // keep a valid empty handle
     gFaustCounter++;
     fFaustNumber = gFaustCounter;
     fOptLevel = LLVM_OPTIMIZATION;
@@ -232,6 +247,7 @@ faustgen_factory::faustgen_factory(const string& name)
 #endif
 }
 
+// Tear down the factory, cached code, and generated resources
 faustgen_factory::~faustgen_factory()
 {
     free_dsp_factory();
@@ -244,15 +260,17 @@ faustgen_factory::~faustgen_factory()
     fSoundUI = nullptr;
 }
 
+// Free the stored Faust source code buffer
 void faustgen_factory::free_sourcecode()
 {
     if (fSourceCode) {
         sysmem_freehandle(fSourceCode);
-        fSourceCodeSize = 0;
-        fSourceCode = nullptr;
     }
+    fSourceCodeSize = 0;
+    fSourceCode = nullptr;
 }
 
+// Free the stored bitcode buffer
 void faustgen_factory::free_bitcode()
 {
     if (fBitCode) {
@@ -262,6 +280,7 @@ void faustgen_factory::free_bitcode()
     }
 }
 
+// Free all DSP instances and delete the current DSP factory
 void faustgen_factory::free_dsp_factory()
 {
     lock_audio();
@@ -282,6 +301,7 @@ void faustgen_factory::free_dsp_factory()
     unlock_audio();
 }
 
+// Recreate an LLVM/Interp factory from cached bitcode
 dsp_factory* faustgen_factory::create_factory_from_bitcode()
 {
     // Alternate model using machine code
@@ -307,6 +327,7 @@ dsp_factory* faustgen_factory::create_factory_from_bitcode()
     return factory;
 }
 
+// Compile stored source code and rebuild the factory with current options
 dsp_factory* faustgen_factory::create_factory_from_sourcecode()
 {
     char name_app[64];
@@ -356,6 +377,7 @@ dsp_factory* faustgen_factory::create_factory_from_sourcecode()
     }
 }
 
+// Instantiate a DSP with optional polyphony and sample-format adaptation
 ::dsp* faustgen_factory::create_dsp_instance(int nvoices)
 {
     ::dsp* dsp = fDSPfactory->createDSPInstance();
@@ -382,6 +404,7 @@ dsp_factory* faustgen_factory::create_factory_from_sourcecode()
     return dsp;
 }
 
+// Build a DSP using bitcode, source, or fallback default, then refresh JSON
 ::dsp* faustgen_factory::create_dsp_aux()
 {
     ::dsp* dsp = nullptr;
@@ -440,6 +463,7 @@ end:
     return dsp;
 }
 
+// Build and cache the JSON UI description for the DSP
 void faustgen_factory::make_json(::dsp* dsp)
 {
     // Prepare JSON
@@ -449,11 +473,13 @@ void faustgen_factory::make_json(::dsp* dsp)
     fJSON = builder.JSON();
 }
 
+// Register an additional library search directory
 void faustgen_factory::add_library_path(const string& library_path)
 {
     fLibraryPath.insert(library_path);
 }
 
+// Add a key/value compiler option pair
 void faustgen_factory::add_compile_option(const string& key, const string& value)
 {
     if ((key != "") && (value != "")) {
@@ -462,6 +488,7 @@ void faustgen_factory::add_compile_option(const string& key, const string& value
     }
 }
 
+// Add a single compiler option token
 void faustgen_factory::add_compile_option(const string& value)
 {
     if (value != "") {
@@ -469,6 +496,7 @@ void faustgen_factory::add_compile_option(const string& value)
     }
 }
 
+// Post the current compiler option list to the Max console
 void faustgen_factory::print_compile_options()
 {
     if (fCompileOptions.size() > 0) {
@@ -480,6 +508,7 @@ void faustgen_factory::print_compile_options()
     }
 }
 
+// Populate compile options with defaults plus user overrides
 void faustgen_factory::default_compile_options()
 {
     // Clear and set default value
@@ -536,6 +565,63 @@ void faustgen_factory::default_compile_options()
      */
 }
 
+void faustgen_factory::load_library_paths(t_dictionary* d)
+{
+    // Load fLibraryPath
+    int i = 0;
+    const char* read_library_path;
+    char library_path[32];
+
+    while (true) {
+        snprintf(library_path, 32, "library_path%d", i++);
+        t_max_err err = dictionary_getstring(d, gensym(library_path), &read_library_path);
+        if (err == MAX_ERR_NONE) {
+            fLibraryPath.insert(read_library_path);
+        } else {
+            break;
+        }
+    }
+}
+
+void faustgen_factory::default_source_code()
+{
+    // Otherwise tries to create from default source code
+    fSourceCodeSize = strlen(DEFAULT_SOURCE_CODE);
+    fSourceCode = sysmem_newhandleclear(fSourceCodeSize + 1);
+    sysmem_copyptr(DEFAULT_SOURCE_CODE, *fSourceCode, fSourceCodeSize);
+}
+
+void faustgen_factory::load_source_code(t_dictionary* d)
+{
+    // Load all library paths
+    load_library_paths(d);
+    
+    // Read sourcecode size key
+    t_max_err err = dictionary_getlong(d, gensym("sourcecode_size"), (t_atom_long*)&fSourceCodeSize);
+    if (err != MAX_ERR_NONE) {
+        default_source_code();
+        return;
+    }
+    
+    // If OK read sourcecode
+    fSourceCode = sysmem_newhandleclear(fSourceCodeSize + 1);           // We need to use a size larger by one for the null terminator
+    const char* sourcecode;
+    err = dictionary_getstring(d, gensym("sourcecode"), &sourcecode);   // The retrieved pointer references the string in the dictionary, it is not a copy.
+    if (err == MAX_ERR_NONE) {
+        sysmem_copyptr(sourcecode, *fSourceCode, fSourceCodeSize);
+        return;
+    }
+
+    // Cleanup the failed allocation before
+    sysmem_freehandle(fSourceCode);
+    fSourceCode = nullptr;
+    fSourceCodeSize = 0;
+    
+    // Falling back to default source
+    default_source_code();
+}
+
+// Load factory settings from a saved Max dictionary
 void faustgen_factory::getfromdictionary(t_dictionary* d)
 {
     // Read machine serial number
@@ -550,15 +636,18 @@ void faustgen_factory::getfromdictionary(t_dictionary* d)
     const char* faustgen_version;
     err = dictionary_getstring(d, gensym("version"), &faustgen_version);
     
-    // Read fSampleFormat version
-    err = dictionary_getlong(d, gensym("sample_format"), (t_atom_long*)&fSampleFormat);
-    
     if (err != MAX_ERR_NONE) {
         post("Cannot read \"version\" key, so ignore bitcode, force recompilation and use default compileoptions");
         goto read_sourcecode;
     } else if (strcmp(faustgen_version, FAUSTGEN_VERSION) != 0) {
         post("Older version of faustgen~/mc.faustgen~ (%s versus %s), so ignore bitcode, force recompilation and use default compileoptions", FAUSTGEN_VERSION, faustgen_version);
         goto read_sourcecode;
+    }
+    
+    // Read fSampleFormat version
+    err = dictionary_getlong(d, gensym("sample_format"), (t_atom_long*)&fSampleFormat);
+    if (err != MAX_ERR_NONE) {
+        fSampleFormat = kNone;
     }
     
     // Read bitcode size key
@@ -572,49 +661,23 @@ void faustgen_factory::getfromdictionary(t_dictionary* d)
     fBitCode = sysmem_newhandleclear(fBitCodeSize + 1);             // We need to use a size larger by one for the null terminator
     const char* bitcode;
     err = dictionary_getstring(d, gensym("machinecode"), &bitcode); // The retrieved pointer references the string in the dictionary, it is not a copy.
-    sysmem_copyptr(bitcode, *fBitCode, fBitCodeSize);
-    if (err != MAX_ERR_NONE) {
-        fBitCodeSize = 0;
-    }
-    
-read_sourcecode:
-    // Load fLibraryPath
-    int i = 0;
-    const char* read_library_path;
-    char library_path[32];
-    
-loop:
-    snprintf(library_path, 32, "library_path%d", i++);
-    err = dictionary_getstring(d, gensym(library_path), &read_library_path);
     if (err == MAX_ERR_NONE) {
-        fLibraryPath.insert(read_library_path);
-        goto loop;
-    }
-    
-    // Read sourcecode size key
-    err = dictionary_getlong(d, gensym("sourcecode_size"), (t_atom_long*)&fSourceCodeSize);
-    if (err != MAX_ERR_NONE) {
-        goto default_sourcecode;
-    }
-    
-    // If OK read sourcecode
-    fSourceCode = sysmem_newhandleclear(fSourceCodeSize + 1);           // We need to use a size larger by one for the null terminator
-    const char* sourcecode;
-    err = dictionary_getstring(d, gensym("sourcecode"), &sourcecode);   // The retrieved pointer references the string in the dictionary, it is not a copy.
-    sysmem_copyptr(sourcecode, *fSourceCode, fSourceCodeSize);
-    if (err == MAX_ERR_NONE) {
+        sysmem_copyptr(bitcode, *fBitCode, fBitCodeSize);
         return;
     }
+
+    // Cleanup the failed allocation before falling back
+    sysmem_freehandle(fBitCode);
+    fBitCode = nullptr;
+    fBitCodeSize = 0;
     
-default_sourcecode:
-    // Otherwise tries to create from default source code
-    fSourceCodeSize = strlen(DEFAULT_SOURCE_CODE);
-    fSourceCode = sysmem_newhandleclear(fSourceCodeSize + 1);
-    sysmem_copyptr(DEFAULT_SOURCE_CODE, *fSourceCode, fSourceCodeSize);
+read_sourcecode:
+    load_source_code(d);
 }
 
 // Called when saving the Max patcher
 // This function saves the necessary data inside the JSON file (Faust sourcecode)
+// Persist factory version, paths, source, and bitcode into the patcher dictionary
 void faustgen_factory::appendtodictionary(t_dictionary* d)
 {
     post("Saving object version, library_path, sourcecode and bitcode...");
@@ -655,8 +718,13 @@ void faustgen_factory::appendtodictionary(t_dictionary* d)
     }
 }
 
+// Try to open a generated SVG diagram and report success
 bool faustgen_factory::try_open_svg()
 {
+    if (!isSafePathSegment(fDrawPath)) {
+        post("Unsafe draw path, cannot open SVG");
+        return false;
+    }
     // Open the svg diagram file inside a web browser
     char command[512];
 #ifdef WIN32
@@ -667,8 +735,13 @@ bool faustgen_factory::try_open_svg()
     return (system(command) == 0);
 }
 
+// Launch the system viewer on the generated SVG diagram
 void faustgen_factory::open_svg()
 {
+    if (!isSafePathSegment(fDrawPath)) {
+        post("Unsafe draw path, refusing to open SVG");
+        return;
+    }
     // Open the svg diagram file inside a web browser
     char command[512];
 #ifdef WIN32
@@ -679,8 +752,13 @@ void faustgen_factory::open_svg()
     system(command);
 }
 
+// Remove generated SVG artifacts for this factory instance
 void faustgen_factory::remove_svg()
 {
+    if (!isSafePathSegment(fDrawPath)) {
+        post("Unsafe draw path, refusing to remove SVG");
+        return;
+    }
     // Possibly done by "compileoptions" or display_svg
     char command[512];
 #ifdef WIN32
@@ -691,6 +769,7 @@ void faustgen_factory::remove_svg()
     system(command);
 }
 
+// Ensure an SVG exists (compiling if needed) then open it
 void faustgen_factory::display_svg()
 {
     // Try to open SVG svg diagram file inside a web browser
@@ -711,10 +790,15 @@ void faustgen_factory::display_svg()
     }
 }
 
+// Open a file from any known library path with the default OS handler
 bool faustgen_factory::open_file(const char* file)
 {
     char command[512];
     for (const auto& it : fLibraryPath) {
+        if (!isSafePathSegment(it)) {
+            post("Unsafe library path skipped: %s", it.c_str());
+            continue;
+        }
     #ifdef WIN32
         snprintf(command, 512, "start \"\" \"%s%s\"", it.c_str(), file);
     #else
@@ -725,10 +809,15 @@ bool faustgen_factory::open_file(const char* file)
     return false;
 }
 
+// Open a file from any known library path with a specific application
 bool faustgen_factory::open_file(const char* appl, const char* file)
 {
     char command[512];
     for (const auto& it : fLibraryPath) {
+        if (!isSafePathSegment(it)) {
+            post("Unsafe library path skipped: %s", it.c_str());
+            continue;
+        }
     #ifdef WIN32
         snprintf(command, 512, "start \"\" %s \"%s%s\"", appl, it.c_str(), file);
     #else
@@ -739,6 +828,7 @@ bool faustgen_factory::open_file(const char* appl, const char* file)
     return false;
 }
 
+// Open the online Faust documentation
 void faustgen_factory::display_documentation()
 {
     // Open the Web documentation
@@ -751,6 +841,7 @@ void faustgen_factory::display_documentation()
     system(command);
 }
 
+// Try to open a library file with a preferred text editor
 void faustgen_factory::display_libraries_aux(const char* lib)
 {
     const char* appl;
@@ -761,6 +852,7 @@ void faustgen_factory::display_libraries_aux(const char* lib)
     }
 }
 
+// Browse the bundled Faust library collection
 void faustgen_factory::display_libraries()
 {
     // Open the libraries
@@ -789,6 +881,7 @@ void faustgen_factory::display_libraries()
     OPEN_FILE("maxmsp.lib");
     OPEN_FILE("mi.lib");
     OPEN_FILE("misceffects.lib");
+    OPEN_FILE("motion.lib");
     OPEN_FILE("noises.lib");
     OPEN_FILE("oscillators.lib");
     OPEN_FILE("phaflangers.lib");
@@ -813,10 +906,11 @@ void faustgen_factory::display_libraries()
     OPEN_FILE("webaudio.lib");
 }
 
+// Replace stored source code and propagate changes to every instance
 void faustgen_factory::update_sourcecode(int size, char* source_code)
 {
     // Recompile only if text has been changed
-    if (strcmp(source_code, *fSourceCode) != 0) {
+    if (!fSourceCode || strcmp(source_code, *fSourceCode) != 0) {
         
         // Delete the existing Faust module
         free_dsp_factory();
@@ -858,6 +952,7 @@ void faustgen_factory::update_sourcecode(int size, char* source_code)
     }
 }
 
+// Update the library search paths based on a Max message
 void faustgen_factory::librarypath(long inlet, t_symbol* s)
 {
     if (s == gensym("")) {
@@ -869,6 +964,7 @@ void faustgen_factory::librarypath(long inlet, t_symbol* s)
     }
 }
 
+// Check whether a given file differs from the cached source code
 bool faustgen_factory::is_new(t_filehandle file_handle, char* file_name)
 {
     char** texthandle = sysmem_newhandle(0);
@@ -887,6 +983,7 @@ bool faustgen_factory::is_new(t_filehandle file_handle, char* file_name)
     return res;
 }
 
+// Read a Faust source file, add its include path, and rebuild instances
 void faustgen_factory::compile_file(t_filehandle file_handle, short path, char* file_name)
 {
     // Delete the existing Faust module
@@ -896,6 +993,9 @@ void faustgen_factory::compile_file(t_filehandle file_handle, short path, char* 
     free_bitcode();
     
     // Always works here since 'is_new' returned true
+    if (!fSourceCode) {
+        fSourceCode = sysmem_newhandleclear(1);
+    }
     sysfile_readtextfile(file_handle, fSourceCode, 0, (t_sysfile_text_flags)(TEXT_LB_UNIX | TEXT_NULL_TERMINATE));
     sysfile_setpos(file_handle, SYSFILE_FROMSTART, 0);
     
@@ -916,6 +1016,7 @@ void faustgen_factory::compile_file(t_filehandle file_handle, short path, char* 
     }
 }
 
+// Load a Faust DSP file via dialog or provided path and recompile if changed
 void faustgen_factory::read(long inlet, t_symbol* s)
 {
     long type = 'TEXT';
@@ -952,6 +1053,7 @@ void faustgen_factory::read(long inlet, t_symbol* s)
     sysfile_close(file_handle);
 }
 
+// Save current Faust source code to disk using dialog or provided path
 void faustgen_factory::write(long inlet, t_symbol* s)
 {
     char file_name[MAX_FILENAME_CHARS];
@@ -1001,6 +1103,7 @@ void faustgen_factory::write(long inlet, t_symbol* s)
     sysfile_close(file_handle);
 }
 
+// Update user-specified compiler options and optionally trigger recompilation
 void faustgen_factory::compileoptions(long inlet, t_symbol* s, long argc, t_atom* argv)
 {
     post("Compiler options modified for faustgen");

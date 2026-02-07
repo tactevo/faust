@@ -59,7 +59,7 @@ static Tree simplifyToNormalFormAux(Tree LS)
     }
 
     if (gGlobal->gFreezeUI) {
-        // Freeze range UI items (sliders and nentry)to their init value
+        // Freeze range UI items (sliders and nentry) to their init value
         startTiming("Freeze values for range UI items");
         L1 = signalUIFreezePromote(L1);
         endTiming("Freeze values for range UI items");
@@ -111,7 +111,7 @@ static Tree simplifyToNormalFormAux(Tree LS)
     typeAnnotation(L4, gGlobal->gLocalCausalityCheck);
     endTiming("L4 typeAnnotation");
 
-    // Must be done after simplifation so that 'size' signal is properly simplified to a constant
+    // Must be done after simplification so that 'size' signal is properly simplified to a constant
     if (gGlobal->gCheckTable) {
         // Check and generate safe access to rdtable/rwtable
         startTiming("Safe access to rdtable/rwtable");
@@ -147,11 +147,13 @@ static Tree simplifyToNormalFormAux(Tree LS)
 LIBFAUST_API Tree simplifyToNormalForm(Tree sig)
 {
     if (isList(sig)) {
+        startTiming("simplifyToNormalForm");
         Tree t2 = sig->getProperty(gGlobal->NORMALFORM);
         if (!t2) {
             t2 = simplifyToNormalFormAux(sig);
             sig->setProperty(gGlobal->NORMALFORM, t2);
         }
+        endTiming("simplifyToNormalForm");
         return t2;
     } else {
         return simplifyToNormalForm(cons(sig, gGlobal->nil));

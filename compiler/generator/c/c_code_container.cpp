@@ -258,11 +258,11 @@ void CCodeContainer::produceClass()
     *fOut << "#define exp10 __exp10" << endl;
     *fOut << "#endif" << endl;
 
-    if (gGlobal->gLightMode) {
-        tab(n, *fOut);
-        *fOut << "#define max(a,b) ((a < b) ? b : a)\n";
-        *fOut << "#define min(a,b) ((a < b) ? a : b)\n";
-    }
+    *fOut << "#ifndef FAUSTMAXI" << endl;
+    *fOut << "#define FAUSTMAXI" << endl;
+    *fOut << "inline int faustmaxi(int a, int b) { return (a > b) ? a : b; }" << endl;
+    *fOut << "inline int faustmini(int a, int b) { return (a < b) ? a : b; }" << endl;
+    *fOut << "#endif" << endl;
 
     tab(n, *fOut);
     *fOut << "typedef struct {";
@@ -654,6 +654,12 @@ void CScalarCodeContainer1::produceClass()
     *fOut << "#ifdef __APPLE__ " << endl;
     *fOut << "#define exp10f __exp10f" << endl;
     *fOut << "#define exp10 __exp10" << endl;
+    *fOut << "#endif" << endl;
+
+    *fOut << "#ifndef FAUSTMAXI" << endl;
+    *fOut << "#define FAUSTMAXI" << endl;
+    *fOut << "inline int faustmaxi(int a, int b) { return (a > b) ? a : b; }" << endl;
+    *fOut << "inline int faustmini(int a, int b) { return (a < b) ? a : b; }" << endl;
     *fOut << "#endif" << endl;
 
     // Generate user interface macros if needed

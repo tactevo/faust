@@ -210,8 +210,15 @@ void Klass::printIncludeFile(ostream& fout)
 /**
  * Print additional functions required by the generated code
  */
+
 void Klass::printAdditionalCode(ostream& fout)
 {
+    fout << "#ifndef FAUSTMAXI" << endl;
+    fout << "#define FAUSTMAXI" << endl;
+    fout << "inline int faustmaxi(int a, int b) { return (a > b) ? a : b; }" << endl;
+    fout << "inline int faustmini(int a, int b) { return (a < b) ? a : b; }" << endl;
+    fout << "#endif" << endl;
+
     if (fNeedPowerDef) {
         // Add faustpower definition to C++ code
         fout << "#ifndef FAUSTPOWER" << endl;
@@ -1064,11 +1071,10 @@ void Klass::printComputeMethodScalarBlock(int n, ostream& fout)
     tab(n + 2, fout);
     fout << "for (int index = 0; index < fullcount; index += " << gGlobal->gVecSize << ") {";
     tab(n + 3, fout);
-    fout << "int count = min(" << gGlobal->gVecSize << ", fullcount-index);";
+    fout << "int count = faustmini(" << gGlobal->gVecSize << ", fullcount-index);";
     printlines(n + 3, fZone3Code, fout);
     printLoopGraphScalar(n + 3, fout);
     printlines(n + 3, fZone3Post, fout);
-
     tab(n + 2, fout);
     fout << "}";
 
@@ -1143,7 +1149,7 @@ void Klass::printComputeMethodVectorSimple(int n, ostream& fout)
     tab(n + 2, fout);
     fout << "for (int index = 0; index < fullcount; index += " << gGlobal->gVecSize << ") {";
     tab(n + 3, fout);
-    fout << "int count = min(" << gGlobal->gVecSize << ", fullcount-index);";
+    fout << "int count = faustmini(" << gGlobal->gVecSize << ", fullcount-index);";
     printlines(n + 3, fZone3Code, fout);
     printLoopGraphVector(n + 3, fout);
     tab(n + 2, fout);
@@ -1481,8 +1487,7 @@ void SigIntGenKlass::println(int n, ostream& fout)
     tab(n + 2, fout);
     fout << "for (int index = 0; index < fullcount; index += " << gGlobal->gVecSize << ") {";
     tab(n + 3, fout);
-    fout << "int count = min(" << gGlobal->gVecSize << ", fullcount-index);";
-
+    fout << "int count = faustmini(" << gGlobal->gVecSize << ", fullcount-index);";
     printlines(n + 3, fZone3Code, fout);
     printLoopGraphInternal(n + 3, fout);
     printlines(n + 3, fZone3Post, fout);
@@ -1549,8 +1554,7 @@ void SigFloatGenKlass::println(int n, ostream& fout)
     tab(n + 2, fout);
     fout << "for (int index = 0; index < fullcount; index += " << gGlobal->gVecSize << ") {";
     tab(n + 3, fout);
-    fout << "int count = min(" << gGlobal->gVecSize << ", fullcount-index);";
-
+    fout << "int count = faustmini(" << gGlobal->gVecSize << ", fullcount-index);";
     printlines(n + 3, fZone3Code, fout);
     printLoopGraphInternal(n + 3, fout);
     printlines(n + 3, fZone3Post, fout);

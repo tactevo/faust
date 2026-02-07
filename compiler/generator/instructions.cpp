@@ -62,8 +62,7 @@ bool Typed::isVectorTyped()
 
 DeclareStructTypeInst* isStructType(const string& name)
 {
-    if (gGlobal->gVarTypeTable.find(name) != gGlobal->gVarTypeTable.end()) {
-        Typed*         type     = gGlobal->gVarTypeTable[name];
+    if (Typed* type = gGlobal->findVarType(name)) {
         Typed::VarType ext_type = Typed::getTypeFromPtr(type->getType());
         // If type is an external Structured type
         if (gGlobal->gExternalStructTypes.find(ext_type) != gGlobal->gExternalStructTypes.end()) {
@@ -100,11 +99,10 @@ ValueInst* IB::genRealNumInst(Typed::VarType ctype, double num)
     if (ctype == Typed::kFloat) {
         return new FloatNumInst(float(num));
     } else if (ctype == Typed::kFloatMacro) {
-        if (gGlobal->gFAUSTFLOAT2Internal) {
-            return genRealNumInst(itfloat(), num);
-        } else {
-            return genCastInst(new DoubleNumInst(num), genBasicTyped(Typed::kFloatMacro));
-        }
+        ValueInst* val = genRealNumInst(itfloat(), num);
+        return (gGlobal->gFAUSTFLOAT2Internal)
+                   ? val
+                   : genCastInst(val, genBasicTyped(Typed::kFloatMacro));
     } else if (ctype == Typed::kDouble) {
         return new DoubleNumInst(num);
     } else if (ctype == Typed::kQuad) {
@@ -181,26 +179,26 @@ void BasicTyped::cleanup()
 }
 void DeclareVarInst::cleanup()
 {
-    gGlobal->gVarTypeTable.clear();
+    gGlobal->clearVarTypeTable();
 }
 
 // Variable types are kept in the global name <===> type table
 DeclareVarInst::DeclareVarInst(Address* address, Typed* type, ValueInst* value)
     : fAddress(address), fType(type), fValue(value)
 {
-    if (gGlobal->gVarTypeTable.find(fAddress->getName()) == gGlobal->gVarTypeTable.end()) {
-        gGlobal->gVarTypeTable[fAddress->getName()] = type;
-    } else if (gGlobal->gVarTypeTable[fAddress->getName()] != type) {
+    const string name     = fAddress->getName();
+    Typed*       var_type = gGlobal->findVarType(name);
+    if (!var_type) {
+        gGlobal->registerVarType(name, type);
+    } else if (var_type != type) {
         // If named type, check their name and internal type
-        NamedTyped* name_t1 =
-            dynamic_cast<NamedTyped*>(gGlobal->gVarTypeTable[fAddress->getName()]);
+        NamedTyped* name_t1 = dynamic_cast<NamedTyped*>(var_type);
         NamedTyped* name_t2 = dynamic_cast<NamedTyped*>(type);
         if (name_t1 && name_t2) {
             faustassert(name_t1->fName == name_t2->fName && name_t1->fType == name_t2->fType);
         } else {
             // If array type, check their size and internal type
-            ArrayTyped* array_t1 =
-                dynamic_cast<ArrayTyped*>(gGlobal->gVarTypeTable[fAddress->getName()]);
+            ArrayTyped* array_t1 = dynamic_cast<ArrayTyped*>(var_type);
             ArrayTyped* array_t2 = dynamic_cast<ArrayTyped*>(type);
             if (array_t1 && array_t2) {
                 // Arrays have the same string representation
@@ -211,9 +209,8 @@ DeclareVarInst::DeclareVarInst(Address* address, Typed* type, ValueInst* value)
                                        (array_t1->fSize == 0 || array_t2->fSize == 0);
                 faustassert(same_type || compatible_type);
                 // If fixed-point, check the string representations
-            } else if (dynamic_cast<FixedTyped*>(gGlobal->gVarTypeTable[fAddress->getName()])) {
-                faustassert(gGlobal->gVarTypeTable[fAddress->getName()]->toString() ==
-                            type->toString());
+            } else if (dynamic_cast<FixedTyped*>(var_type)) {
+                faustassert(var_type->toString() == type->toString());
             } else {
                 dump2FIR(address);
                 dump2FIR(type);
@@ -236,11 +233,11 @@ DeclareBufferIterators::DeclareBufferIterators(const string& name1, const string
 {
     for (int i = 0; i < channels; i++) {
         string chan_name = name1 + std::to_string(i);
-        auto   contains  = gGlobal->gVarTypeTable.find(chan_name);
-        if (contains == gGlobal->gVarTypeTable.end()) {
-            gGlobal->gVarTypeTable[chan_name] = type;
+        Typed* var_type  = gGlobal->findVarType(chan_name);
+        if (!var_type) {
+            gGlobal->registerVarType(chan_name, type);
         } else {
-            faustassert(contains->second == type);
+            faustassert(var_type == type);
         }
     }
 }
@@ -282,10 +279,11 @@ int ArrayTyped::getSizeBytes() const
 DeclareFunInst::DeclareFunInst(const string& name, FunTyped* type, BlockInst* code)
     : fName(name), fType(type), fCode(code)
 {
-    if (gGlobal->gVarTypeTable.find(name) == gGlobal->gVarTypeTable.end()) {
-        gGlobal->gVarTypeTable[name] = type;
+    Typed* var_type = gGlobal->findVarType(name);
+    if (!var_type) {
+        gGlobal->registerVarType(name, type);
     } else {
-        FunTyped* fun_type = static_cast<FunTyped*>(gGlobal->gVarTypeTable[name]);
+        FunTyped* fun_type = static_cast<FunTyped*>(var_type);
         // If same result type
         if (fun_type->getTyped() == type->getTyped()) {
             if ((gGlobal->gOutputLang == "llvm") && (fun_type->toString() != type->toString())) {
@@ -310,10 +308,8 @@ DeclareFunInst::DeclareFunInst(const string& name, FunTyped* type, BlockInst* co
 // Function argument variable types are kept in the global num <===> type table
 NamedTyped* IB::genNamedTyped(const string& name, Typed* type)
 {
-    if (gGlobal->gVarTypeTable.find(name) == gGlobal->gVarTypeTable.end()) {
-        // cout << "IB::genNamedTyped " << name << " " <<
-        // Typed::gTypeString[type->getType()] << endl;
-        gGlobal->gVarTypeTable[name] = type;
+    if (!gGlobal->findVarType(name)) {
+        gGlobal->registerVarType(name, type);
     }
     return new NamedTyped(name, type);
 }
@@ -327,17 +323,17 @@ NamedTyped* IB::genNamedTyped(const string& name, Typed::VarType type)
 // Casting
 ValueInst* IB::genCastRealInst(ValueInst* inst)
 {
-    return IB::genCastInst(inst, IB::genItFloatTyped());
+    return genCastInst(inst, genItFloatTyped());
 }
 
 ValueInst* IB::genCastFloatMacroInst(ValueInst* inst)
 {
-    return IB::genCastInst(inst, IB::genFloatMacroTyped());
+    return genCastInst(inst, genFloatMacroTyped());
 }
 
 ValueInst* IB::genCastInt32Inst(ValueInst* inst)
 {
-    return IB::genCastInst(inst, IB::genInt32Typed());
+    return genCastInst(inst, genInt32Typed());
 }
 
 // BasicTyped are not cloned, but actually point on the same underlying type
@@ -399,32 +395,32 @@ SimpleForLoopInst::SimpleForLoopInst(const string& name, ValueInst* upperBound,
 DeclareFunInst* IB::genVoidFunction(const string& name, BlockInst* code)
 {
     Names     args;
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genVoidTyped());
-    return IB::genDeclareFunInst(name, fun_type, code);
+    FunTyped* fun_type = genFunTyped(args, genVoidTyped());
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 DeclareFunInst* IB::genVoidFunction(const string& name, Names& args, BlockInst* code,
                                     bool isvirtual)
 {
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genVoidTyped(),
-                                         (isvirtual) ? FunTyped::kVirtual : FunTyped::kDefault);
-    return IB::genDeclareFunInst(name, fun_type, code);
+    FunTyped* fun_type =
+        genFunTyped(args, genVoidTyped(), (isvirtual) ? FunTyped::kVirtual : FunTyped::kDefault);
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 DeclareFunInst* IB::genFunction0(const string& name, Typed::VarType res, BlockInst* code)
 {
     Names     args;
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genBasicTyped(res));
-    return IB::genDeclareFunInst(name, fun_type, code);
+    FunTyped* fun_type = IB::genFunTyped(args, genBasicTyped(res));
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 DeclareFunInst* IB::genFunction1(const string& name, Typed::VarType res, const string& arg1,
                                  Typed::VarType arg1_ty, BlockInst* code)
 {
     Names args;
-    args.push_back(IB::genNamedTyped(arg1, arg1_ty));
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genBasicTyped(res));
-    return IB::genDeclareFunInst(name, fun_type, code);
+    args.push_back(genNamedTyped(arg1, arg1_ty));
+    FunTyped* fun_type = genFunTyped(args, IB::genBasicTyped(res));
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 DeclareFunInst* IB::genFunction2(const string& name, Typed::VarType res, const string& arg1,
@@ -432,10 +428,10 @@ DeclareFunInst* IB::genFunction2(const string& name, Typed::VarType res, const s
                                  BlockInst* code)
 {
     Names args;
-    args.push_back(IB::genNamedTyped(arg1, arg1_ty));
-    args.push_back(IB::genNamedTyped(arg2, arg2_ty));
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genBasicTyped(res));
-    return IB::genDeclareFunInst(name, fun_type, code);
+    args.push_back(genNamedTyped(arg1, arg1_ty));
+    args.push_back(genNamedTyped(arg2, arg2_ty));
+    FunTyped* fun_type = genFunTyped(args, IB::genBasicTyped(res));
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 DeclareFunInst* IB::genFunction3(const string& name, Typed::VarType res, const string& arg1,
@@ -443,11 +439,11 @@ DeclareFunInst* IB::genFunction3(const string& name, Typed::VarType res, const s
                                  const string& arg3, Typed::VarType arg3_ty, BlockInst* code)
 {
     Names args;
-    args.push_back(IB::genNamedTyped(arg1, arg1_ty));
-    args.push_back(IB::genNamedTyped(arg2, arg2_ty));
-    args.push_back(IB::genNamedTyped(arg3, arg3_ty));
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genBasicTyped(res));
-    return IB::genDeclareFunInst(name, fun_type, code);
+    args.push_back(genNamedTyped(arg1, arg1_ty));
+    args.push_back(genNamedTyped(arg2, arg2_ty));
+    args.push_back(genNamedTyped(arg3, arg3_ty));
+    FunTyped* fun_type = genFunTyped(args, genBasicTyped(res));
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 DeclareFunInst* IB::genFunction4(const string& name, Typed::VarType res, const string& arg1,
@@ -456,12 +452,12 @@ DeclareFunInst* IB::genFunction4(const string& name, Typed::VarType res, const s
                                  Typed::VarType arg4_ty, BlockInst* code)
 {
     Names args;
-    args.push_back(IB::genNamedTyped(arg1, arg1_ty));
-    args.push_back(IB::genNamedTyped(arg2, arg2_ty));
-    args.push_back(IB::genNamedTyped(arg3, arg3_ty));
-    args.push_back(IB::genNamedTyped(arg4, arg4_ty));
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genBasicTyped(res));
-    return IB::genDeclareFunInst(name, fun_type, code);
+    args.push_back(genNamedTyped(arg1, arg1_ty));
+    args.push_back(genNamedTyped(arg2, arg2_ty));
+    args.push_back(genNamedTyped(arg3, arg3_ty));
+    args.push_back(genNamedTyped(arg4, arg4_ty));
+    FunTyped* fun_type = genFunTyped(args, genBasicTyped(res));
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 DeclareFunInst* IB::genFunction5(const string& name, Typed::VarType res, const string& arg1,
@@ -471,13 +467,13 @@ DeclareFunInst* IB::genFunction5(const string& name, Typed::VarType res, const s
                                  BlockInst* code)
 {
     Names args;
-    args.push_back(IB::genNamedTyped(arg1, arg1_ty));
-    args.push_back(IB::genNamedTyped(arg2, arg2_ty));
-    args.push_back(IB::genNamedTyped(arg3, arg3_ty));
-    args.push_back(IB::genNamedTyped(arg4, arg4_ty));
-    args.push_back(IB::genNamedTyped(arg5, arg5_ty));
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genBasicTyped(res));
-    return IB::genDeclareFunInst(name, fun_type, code);
+    args.push_back(genNamedTyped(arg1, arg1_ty));
+    args.push_back(genNamedTyped(arg2, arg2_ty));
+    args.push_back(genNamedTyped(arg3, arg3_ty));
+    args.push_back(genNamedTyped(arg4, arg4_ty));
+    args.push_back(genNamedTyped(arg5, arg5_ty));
+    FunTyped* fun_type = genFunTyped(args, genBasicTyped(res));
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 DeclareFunInst* IB::genFunction6(const string& name, Typed::VarType res, const string& arg1,
@@ -487,14 +483,14 @@ DeclareFunInst* IB::genFunction6(const string& name, Typed::VarType res, const s
                                  const string& arg6, Typed::VarType arg6_ty, BlockInst* code)
 {
     Names args;
-    args.push_back(IB::genNamedTyped(arg1, arg1_ty));
-    args.push_back(IB::genNamedTyped(arg2, arg2_ty));
-    args.push_back(IB::genNamedTyped(arg3, arg3_ty));
-    args.push_back(IB::genNamedTyped(arg4, arg4_ty));
-    args.push_back(IB::genNamedTyped(arg5, arg5_ty));
-    args.push_back(IB::genNamedTyped(arg6, arg6_ty));
-    FunTyped* fun_type = IB::genFunTyped(args, IB::genBasicTyped(res));
-    return IB::genDeclareFunInst(name, fun_type, code);
+    args.push_back(genNamedTyped(arg1, arg1_ty));
+    args.push_back(genNamedTyped(arg2, arg2_ty));
+    args.push_back(genNamedTyped(arg3, arg3_ty));
+    args.push_back(genNamedTyped(arg4, arg4_ty));
+    args.push_back(genNamedTyped(arg5, arg5_ty));
+    args.push_back(genNamedTyped(arg6, arg6_ty));
+    FunTyped* fun_type = genFunTyped(args, genBasicTyped(res));
+    return genDeclareFunInst(name, fun_type, code);
 }
 
 bool LoadVarInst::isSimpleValue() const
@@ -524,16 +520,16 @@ void ScalVecDispatcherVisitor::Dispatch2Visitor(ValueInst* inst)
 DeclareVarInst* IB::genDecStructVar(const string& vname, Typed* type, ValueInst* exp)
 {
     if (gGlobal->gMemoryManager >= 1) {
-        if ((startWith(vname, "iRec") || startWith(vname, "iVec") || startWith(vname, "iYec") ||
-             startWith(vname, "iZec") || startWith(vname, "itbl")) &&
-            dynamic_cast<ArrayTyped*>(type)) {
+        if (dynamic_cast<ArrayTyped*>(type) &&
+            (startWith(vname, "iRec") || startWith(vname, "iVec") || startWith(vname, "iYec") ||
+             startWith(vname, "iZec") || startWith(vname, "itbl"))) {
             // The "iRec/iVec..." array has a base index in the iZone array, to be added to the
             // actual index
             return gGlobal->gIntZone->declare(vname, type, exp);
-        } else if ((startWith(vname, "fRec") || startWith(vname, "fVec") ||
+        } else if (dynamic_cast<ArrayTyped*>(type) &&
+                   (startWith(vname, "fRec") || startWith(vname, "fVec") ||
                     startWith(vname, "fYec") || startWith(vname, "fZec") ||
-                    startWith(vname, "ftbl")) &&
-                   dynamic_cast<ArrayTyped*>(type)) {
+                    startWith(vname, "ftbl"))) {
             // The "fRec/fVec..." array has a base index in the fZone array, to be added to the
             // actual index
             return gGlobal->gRealZone->declare(vname, type, exp);

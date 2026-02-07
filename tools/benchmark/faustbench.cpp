@@ -1,6 +1,6 @@
 /************************************************************************
  FAUST Architecture File
- Copyright (C) 2017 GRAME, Centre National de Creation Musicale
+ Copyright (C) 2017-2025 GRAME, Centre National de Creation Musicale
  ---------------------------------------------------------------------
  This Architecture section is free software; you can redistribute it
  and/or modify it under the terms of the GNU General Public License
@@ -27,14 +27,11 @@
 #include <iostream>
 #include <string>
 #include <math.h>
-
-#define min(a, b) ((a) < (b) ? (a) : (b))
-#define max(a, b) ((a) > (b) ? (a) : (b))
+#include <cmath>
 
 #include "faust/gui/UI.h"
 #include "faust/dsp/dsp-bench.h"
 #include "faust/misc.h"
-
 #include "faust/gui/Soundfile.h"
 
 // To be used by DSP code if no SoundUI is used
@@ -50,7 +47,56 @@ Soundfile* defaultsound = nullptr;
 #include "dsp_scal_mcd16.h"
 #include "dsp_scal_mcd32.h"
 #include "dsp_scal_mcd64.h"
-#include "dsp_scal_os.h"
+#if defined(__APPLE__)
+#include "dsp_scal_clang.h"
+#include "dsp_scal_exp10_clang.h"
+#include "dsp_scal_mcd0_clang.h"
+#include "dsp_scal_mcd2_clang.h"
+#include "dsp_scal_mcd8_clang.h"
+#include "dsp_scal_mcd16_clang.h"
+#include "dsp_scal_mcd32_clang.h"
+#include "dsp_scal_mcd64_clang.h"
+#include "dsp_vec0_4_clang.h"
+#include "dsp_vec0_8_clang.h"
+#include "dsp_vec0_16_clang.h"
+#include "dsp_vec0_32_clang.h"
+#include "dsp_vec0_64_clang.h"
+#include "dsp_vec0_128_clang.h"
+#include "dsp_vec0_256_clang.h"
+#include "dsp_vec0_512_clang.h"
+#include "dsp_vec0_fun_4_clang.h"
+#include "dsp_vec0_fun_8_clang.h"
+#include "dsp_vec0_fun_16_clang.h"
+#include "dsp_vec0_fun_32_clang.h"
+#include "dsp_vec0_fun_64_clang.h"
+#include "dsp_vec0_fun_128_clang.h"
+#include "dsp_vec0_fun_256_clang.h"
+#include "dsp_vec0_fun_512_clang.h"
+#include "dsp_vec0g_4_clang.h"
+#include "dsp_vec0g_8_clang.h"
+#include "dsp_vec0g_16_clang.h"
+#include "dsp_vec0g_32_clang.h"
+#include "dsp_vec0g_64_clang.h"
+#include "dsp_vec0g_128_clang.h"
+#include "dsp_vec0g_256_clang.h"
+#include "dsp_vec0g_512_clang.h"
+#include "dsp_vec1_4_clang.h"
+#include "dsp_vec1_8_clang.h"
+#include "dsp_vec1_16_clang.h"
+#include "dsp_vec1_32_clang.h"
+#include "dsp_vec1_64_clang.h"
+#include "dsp_vec1_128_clang.h"
+#include "dsp_vec1_256_clang.h"
+#include "dsp_vec1_512_clang.h"
+#include "dsp_vec1g_4_clang.h"
+#include "dsp_vec1g_8_clang.h"
+#include "dsp_vec1g_16_clang.h"
+#include "dsp_vec1g_32_clang.h"
+#include "dsp_vec1g_64_clang.h"
+#include "dsp_vec1g_128_clang.h"
+#include "dsp_vec1g_256_clang.h"
+#include "dsp_vec1g_512_clang.h"
+#endif
 
 #include "dsp_vec0_4.h"
 #include "dsp_vec0_8.h"
@@ -104,7 +150,17 @@ Soundfile* defaultsound = nullptr;
 #include "dsp_scal_mcd0.h"
 #include "dsp_scal_mcd8.h"
 #include "dsp_scal_mcd32.h"
-#include "dsp_scal_os.h"
+#if defined(__APPLE__)
+#include "dsp_scal_clang.h"
+#include "dsp_scal_exp10_clang.h"
+#include "dsp_scal_mcd0_clang.h"
+#include "dsp_scal_mcd8_clang.h"
+#include "dsp_scal_mcd32_clang.h"
+#include "dsp_vec0_32_clang.h"
+#include "dsp_vec0g_32_clang.h"
+#include "dsp_vec1_32_clang.h"
+#include "dsp_vec1g_32_clang.h"
+#endif
 #include "dsp_vec0_32.h"
 #include "dsp_vec1_32.h"
 #include "dsp_vec0g_32.h"
@@ -113,7 +169,9 @@ Soundfile* defaultsound = nullptr;
 #elif defined(SINGLE_TESTS)
 
 #include "dsp_scal.h"
-
+#if defined(__APPLE__)
+#include "dsp_scal_clang.h"
+#endif
 #endif
 
 using namespace std;
@@ -169,7 +227,16 @@ extern "C" int bench_all(const char* name, int run, int buffer_size, bool is_tra
     options.push_back("-scal -mcd 16" + OPTIONS);
     options.push_back("-scal -mcd 32" + OPTIONS);
     options.push_back("-scal -mcd 64" + OPTIONS);
-    options.push_back("-scal -os" + OPTIONS);
+#if defined(__APPLE__)
+    options.push_back("-scal -clang" + OPTIONS);
+    options.push_back("-scal -exp10 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 0 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 2 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 8 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 16 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 32 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 64 -clang" + OPTIONS);
+#endif
     
     options.push_back("-vec -lv 0 -vs 4" + OPTIONS);
     options.push_back("-vec -lv 0 -vs 8" + OPTIONS);
@@ -215,6 +282,52 @@ extern "C" int bench_all(const char* name, int run, int buffer_size, bool is_tra
     options.push_back("-vec -lv 1 -g -vs 128" + OPTIONS);
     options.push_back("-vec -lv 1 -g -vs 256" + OPTIONS);
     options.push_back("-vec -lv 1 -g -vs 512" + OPTIONS);
+#if defined(__APPLE__)
+    options.push_back("-vec -lv 0 -vs 4 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -vs 8 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -vs 16 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -vs 32 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -vs 64 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -vs 128 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -vs 256 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -vs 512 -clang" + OPTIONS);
+
+    options.push_back("-vec -fun -lv 0 -vs 4 -clang" + OPTIONS);
+    options.push_back("-vec -fun -lv 0 -vs 8 -clang" + OPTIONS);
+    options.push_back("-vec -fun -lv 0 -vs 16 -clang" + OPTIONS);
+    options.push_back("-vec -fun -lv 0 -vs 32 -clang" + OPTIONS);
+    options.push_back("-vec -fun -lv 0 -vs 64 -clang" + OPTIONS);
+    options.push_back("-vec -fun -lv 0 -vs 128 -clang" + OPTIONS);
+    options.push_back("-vec -fun -lv 0 -vs 256 -clang" + OPTIONS);
+    options.push_back("-vec -fun -lv 0 -vs 512 -clang" + OPTIONS);
+
+    options.push_back("-vec -lv 0 -g -vs 4 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -g -vs 8 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -g -vs 16 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -g -vs 32 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -g -vs 64 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -g -vs 128 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -g -vs 256 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -g -vs 512 -clang" + OPTIONS);
+
+    options.push_back("-vec -lv 1 -vs 4 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 8 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 16 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 32 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 64 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 128 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 256 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 512 -clang" + OPTIONS);
+
+    options.push_back("-vec -lv 1 -g -vs 4 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -g -vs 8 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -g -vs 16 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -g -vs 32 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -g -vs 64 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -g -vs 128 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -g -vs 256 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -g -vs 512 -clang" + OPTIONS);
+#endif
     
 #elif defined(FAST_TESTS)
     
@@ -223,15 +336,30 @@ extern "C" int bench_all(const char* name, int run, int buffer_size, bool is_tra
     options.push_back("-scal -mcd 0" + OPTIONS);
     options.push_back("-scal -mcd 8" + OPTIONS);
     options.push_back("-scal -mcd 32" + OPTIONS);
-    options.push_back("-scal -os" + OPTIONS);
+#if defined(__APPLE__)
+    options.push_back("-scal -clang" + OPTIONS);
+    options.push_back("-scal -exp10 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 0 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 8 -clang" + OPTIONS);
+    options.push_back("-scal -mcd 32 -clang" + OPTIONS);
+#endif
     options.push_back("-vec -lv 0 -vs 32" + OPTIONS);
     options.push_back("-vec -lv 0 -vs 32 -g" + OPTIONS);
     options.push_back("-vec -lv 1 -vs 32" + OPTIONS);
     options.push_back("-vec -lv 1 -vs 32 -g" + OPTIONS);
+#if defined(__APPLE__)
+    options.push_back("-vec -lv 0 -vs 32 -clang" + OPTIONS);
+    options.push_back("-vec -lv 0 -vs 32 -g -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 32 -clang" + OPTIONS);
+    options.push_back("-vec -lv 1 -vs 32 -g -clang" + OPTIONS);
+#endif
     
 #elif defined(SINGLE_TESTS)
     
     options.push_back("-scal" + OPTIONS);
+#if defined(__APPLE__)
+    options.push_back("-scal -clang" + OPTIONS);
+#endif
     
 #endif
     
@@ -248,10 +376,19 @@ extern "C" int bench_all(const char* name, int run, int buffer_size, bool is_tra
     measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd16(), sizeof(dsp_scal_mcd16), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd32(), sizeof(dsp_scal_mcd32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd64(), sizeof(dsp_scal_mcd64), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
-    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_os(), sizeof(dsp_scal_os), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#if defined(__APPLE__)
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_clang(), sizeof(dsp_scal_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_exp10_clang(), sizeof(dsp_scal_exp10_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd0_clang(), sizeof(dsp_scal_mcd0_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd2_clang(), sizeof(dsp_scal_mcd2_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd8_clang(), sizeof(dsp_scal_mcd8_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd16_clang(), sizeof(dsp_scal_mcd16_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd32_clang(), sizeof(dsp_scal_mcd32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd64_clang(), sizeof(dsp_scal_mcd64_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#endif
     
     // Vector -lv 0
-    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_4(), sizeof(dsp_vec1_4), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_4(), sizeof(dsp_vec0_4), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_8(), sizeof(dsp_vec0_8), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_16(), sizeof(dsp_vec0_16), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_32(), sizeof(dsp_vec0_32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
@@ -260,7 +397,16 @@ extern "C" int bench_all(const char* name, int run, int buffer_size, bool is_tra
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_256(), sizeof(dsp_vec0_256), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_512(), sizeof(dsp_vec0_512), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     
-    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_4(), sizeof(dsp_vec1_4), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_4(), sizeof(dsp_vec0_fun_4), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_8(), sizeof(dsp_vec0_fun_8), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_16(), sizeof(dsp_vec0_fun_16), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_32(), sizeof(dsp_vec0_fun_32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_64(), sizeof(dsp_vec0_fun_64), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_128(), sizeof(dsp_vec0_fun_128), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_256(), sizeof(dsp_vec0_fun_256), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_512(), sizeof(dsp_vec0_fun_512), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_4(), sizeof(dsp_vec0g_4), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_8(), sizeof(dsp_vec0g_8), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_16(), sizeof(dsp_vec0g_16), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_32(), sizeof(dsp_vec0g_32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
@@ -287,6 +433,52 @@ extern "C" int bench_all(const char* name, int run, int buffer_size, bool is_tra
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_128(), sizeof(dsp_vec1g_128), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_256(), sizeof(dsp_vec1g_256), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_512(), sizeof(dsp_vec1g_512), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#if defined(__APPLE__)
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_4_clang(), sizeof(dsp_vec0_4_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_8_clang(), sizeof(dsp_vec0_8_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_16_clang(), sizeof(dsp_vec0_16_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_32_clang(), sizeof(dsp_vec0_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_64_clang(), sizeof(dsp_vec0_64_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_128_clang(), sizeof(dsp_vec0_128_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_256_clang(), sizeof(dsp_vec0_256_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_512_clang(), sizeof(dsp_vec0_512_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_4_clang(), sizeof(dsp_vec0_fun_4_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_8_clang(), sizeof(dsp_vec0_fun_8_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_16_clang(), sizeof(dsp_vec0_fun_16_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_32_clang(), sizeof(dsp_vec0_fun_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_64_clang(), sizeof(dsp_vec0_fun_64_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_128_clang(), sizeof(dsp_vec0_fun_128_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_256_clang(), sizeof(dsp_vec0_fun_256_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_fun_512_clang(), sizeof(dsp_vec0_fun_512_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_4_clang(), sizeof(dsp_vec0g_4_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_8_clang(), sizeof(dsp_vec0g_8_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_16_clang(), sizeof(dsp_vec0g_16_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_32_clang(), sizeof(dsp_vec0g_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_64_clang(), sizeof(dsp_vec0g_64_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_128_clang(), sizeof(dsp_vec0g_128_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_256_clang(), sizeof(dsp_vec0g_256_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_512_clang(), sizeof(dsp_vec0g_512_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_4_clang(), sizeof(dsp_vec1_4_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_8_clang(), sizeof(dsp_vec1_8_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_16_clang(), sizeof(dsp_vec1_16_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_32_clang(), sizeof(dsp_vec1_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_64_clang(), sizeof(dsp_vec1_64_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_128_clang(), sizeof(dsp_vec1_128_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_256_clang(), sizeof(dsp_vec1_256_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_512_clang(), sizeof(dsp_vec1_512_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_4_clang(), sizeof(dsp_vec1g_4_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_8_clang(), sizeof(dsp_vec1g_8_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_16_clang(), sizeof(dsp_vec1g_16_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_32_clang(), sizeof(dsp_vec1g_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_64_clang(), sizeof(dsp_vec1g_64_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_128_clang(), sizeof(dsp_vec1g_128_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_256_clang(), sizeof(dsp_vec1g_256_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_512_clang(), sizeof(dsp_vec1g_512_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#endif
     
 #elif defined(FAST_TESTS)
     
@@ -295,16 +487,31 @@ extern "C" int bench_all(const char* name, int run, int buffer_size, bool is_tra
     measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd0(), sizeof(dsp_scal_mcd0), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd8(), sizeof(dsp_scal_mcd8), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd32(), sizeof(dsp_scal_mcd32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
-    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_os(), sizeof(dsp_scal_os), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#if defined(__APPLE__)
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_clang(), sizeof(dsp_scal_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_exp10_clang(), sizeof(dsp_scal_exp10_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd0_clang(), sizeof(dsp_scal_mcd0_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd8_clang(), sizeof(dsp_scal_mcd8_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_mcd32_clang(), sizeof(dsp_scal_mcd32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#endif
     
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_32(), sizeof(dsp_vec0_32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_32(), sizeof(dsp_vec0g_32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_32(), sizeof(dsp_vec1_32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
     measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_32(), sizeof(dsp_vec1g_32), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#if defined(__APPLE__)
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0_32_clang(), sizeof(dsp_vec0_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec0g_32_clang(), sizeof(dsp_vec0g_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1_32_clang(), sizeof(dsp_vec1_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_vec1g_32_clang(), sizeof(dsp_vec1g_32_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#endif
     
 #elif defined(SINGLE_TESTS)
     
     measures.push_back(bench<FAUSTFLOAT>(new dsp_scal(), sizeof(dsp_scal), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#if defined(__APPLE__)
+    measures.push_back(bench<FAUSTFLOAT>(new dsp_scal_clang(), sizeof(dsp_scal_clang), options[ind++], run, buffer_size, is_trace, is_control, ds, us, filter));
+#endif
     
 #endif
     
